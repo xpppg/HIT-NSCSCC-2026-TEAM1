@@ -422,7 +422,6 @@ assign inst_normal = inst_add_w | inst_sub_w | inst_addi_w | inst_lu12i_w |
                      inst_slt | inst_sltu | inst_slti | inst_sltui |
                      inst_pcaddu12i | inst_and | inst_or | inst_nor | inst_xor |
                      inst_andi | inst_ori | inst_xori |
-                     inst_mul_w | inst_mulh_w | inst_mulh_wu |
                      inst_sll_w | inst_srl_w | inst_sra_w |
                      inst_slli_w | inst_srli_w | inst_srai_w |
                      inst_cpucfg | inst_cacop | inst_dbar | inst_ibar;

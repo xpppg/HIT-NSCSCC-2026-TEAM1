@@ -228,7 +228,7 @@ assign IF2_ready_go = ~fetch_stall;
 
 assign ID_ready_go =  ~cpu_stall;
 assign IS_ready_go =  ~cpu_stall & ~rf_we_wating & ~peu_wating;
-assign EXE_ready_go = ~div_wating & ~sub_div_wating & ~cpu_stall & ~mmu_wating;
+assign EXE_ready_go = ~div_wating & ~cpu_stall & ~mmu_wating;
 assign MEM_ready_go = ~cpu_stall;
 assign WB_ready_go  = 1'b1;
 
@@ -957,7 +957,7 @@ always @(posedge clk) begin
 end
 
 
-alu u_alu1(
+alu1 u_alu1(
     .clk        (clk               ),
     .reset      (reset             ),
     .alu_op     (ex_alu_op         ),
@@ -970,14 +970,13 @@ alu u_alu1(
     .forward_result (EXE_forward_result)
     );
 
-alu u_alu2(
+alu2 u_alu2(
     .clk        (clk               ),
     .reset      (reset             ),
     .alu_op     (ex_alu_op_2       ),
     .alu_src1   (ex_alu_src3       ),
     .alu_src2   (ex_alu_src4       ),
     .alu_result (ex_alu_result_2   ),
-    .div_wating (sub_div_wating    ),
     .EXE_valid  (sub_EXE_valid     ),
     .forward_ok (EXE_forward_ok_2  ),
     .forward_result (EXE_forward_result_2)
