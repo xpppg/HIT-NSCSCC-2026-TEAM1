@@ -1000,7 +1000,7 @@ bru u_bru(
     );
 
 lsu u_lsu(
-    .en(ex_ctrl_en[2] & EXE_valid & ~cpu_stall & MEM_allowin & ~flush & ~ex_ex_info_buf[0]),
+    .en(ex_ctrl_en[2] & EXE_valid & ~cpu_stall & MEM_allowin & ~flush & ~ex_ex_info_buf[0] & ~wb_br_taken),
     .op(ex_lsu_op      ),
     .rj_value(ex_rj_value  ),
     .rd_value(ex_rd_value  ),
@@ -1033,7 +1033,7 @@ assign data_sram_wdata = ex_mem_wdata;
 assign data_sram_rsize = ex_mem_rsize;
 
 peu u_peu(
-    .en(ex_ctrl_en[3] & EXE_valid & ~cpu_stall & MEM_allowin & ~flush & ~ex_ex_info_buf[0]),
+    .en(ex_ctrl_en[3] & EXE_valid & ~cpu_stall & MEM_allowin & ~flush & ~ex_ex_info_buf[0] & ~wb_br_taken),
     .op(ex_peu_op      ),
     .rj_value(ex_rj_value  ),
     .rd_value(ex_rd_value  ),
