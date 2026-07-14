@@ -1,6 +1,8 @@
 module BPU(
     input  wire        clk,
     input  wire        rst,
+    input  wire        clk_rst,
+    output wire        pht_rst,
     // 读端口
     input  wire [31:0] pc,
     output wire [31:0] pred_target,
@@ -43,6 +45,8 @@ wire PHT_taken_2;
     PHT u_PHT(
         .clk         (clk),
         .rst         (rst),
+        .clk_rst     (clk_rst),
+        .pht_rst     (pht_rst),
         
         .pc          (pc),
         .PHT_taken  (PHT_taken),
@@ -240,6 +244,8 @@ endmodule
 module PHT(
     input  wire        clk,
     input  wire        rst,
+    input  wire        clk_rst,
+    output reg         pht_rst,
     // 读端口
     input  wire [31:0] pc,
     output wire PHT_taken,
@@ -274,15 +280,15 @@ wire [10:0] windex_PHTs;
 wire index_10_1;
 wire index_10_2;
 wire index_10_3;
+reg  [10:0] offset;
 
 //reg  [1:0] PHT[4095:0];
-reg  [1:0] PHT[2047:0];
 reg  [1:0] BHT[1023:0];
 reg  [1:0] GHR;
 reg  [1:0] BHT_value;
 reg  [1:0] BHT_value2;
-reg  [1:0] PHT_value;
-reg  [1:0] PHT_value2;
+wire [1:0] PHT_value;
+wire [1:0] PHT_value2;
 //reg  JL[1023:0]; // 记录是否是jirl指令
 //reg  [19:0] JL_tag[1023:0]; // 记录jirl指令的tag
 
@@ -322,54 +328,74 @@ always @(posedge clk) begin
     end
 end
 
-integer i;
 always @(posedge clk) begin
-    if(rst) begin
-        for(i = 0; i < 2048; i = i + 1) begin
-            PHT[i] = 2'b00; 
-        end
+    if(clk_rst & ~pht_rst) begin
+        pht_rst <= 1'b1;
+        offset <= 11'b0;
     end 
-    else if(PHT_wen) begin
-        if(actual_taken) begin
-            if(br_pht < 2'b11) begin
-                PHT[windex_PHTs] <= br_pht + 1'b1; 
-            end
-        end 
-        else begin
-            if(br_pht > 2'b00) begin
-                PHT[windex_PHTs] <= br_pht - 1'b1; 
+    else if(pht_rst) begin
+        if(offset == 11'b11111111111) begin
+            if(clk_rst) begin
+                pht_rst <= 1'b1;
+                offset <= 11'b11111111111;
+            end 
+            else begin
+                pht_rst <= 1'b0;
+                offset <= 11'b0;
             end
         end
+        else begin
+            offset <= offset + 1'b1;
+        end
+    end
+    else begin
+        pht_rst <= 1'b0;
+        offset <= 11'b0;
     end
 end
 
-/*always @(posedge clk) begin
-    if(rst) begin
-        GHR <= 2'b0;
-    end 
-    else if(PHT_wen) begin
-        GHR <= {GHR[0], actual_taken};
-    end
-end*/
 
 
-/*assign pred_taken = (BHT[rindex] == 2'b11) ? 1'b1 :
-                    (BHT[rindex] == 2'b00) ? 1'b0 : PHT[rindex_PHTs][1];
-assign pred_taken_2 = (BHT[rindex_2] == 2'b11) ? 1'b1 :
-                      (BHT[rindex_2] == 2'b00) ? 1'b0 : PHT[rindex_2_PHTs][1];*/
+wire pht_we;
+wire [10:0] pht_windex;
+wire [1:0] pht_wdata;
+
+assign pht_we = (PHT_wen & ((actual_taken & (br_pht < 2'b11)) | (~actual_taken & (br_pht > 2'b00)))) | pht_rst;
+assign pht_windex = pht_rst ? offset : windex_PHTs;
+assign pht_wdata = pht_rst ? 2'b0 : actual_taken ? (br_pht + 1'b1) : (br_pht - 1'b1);
+
+pht_bram pht_way0(
+    .clka(clk),
+    .ena(1'b1),
+    .wea(pht_we),
+    .addra(pht_windex),
+    .dina(pht_wdata),
+    .clkb(clk),
+    .enb(1'b1),
+    .addrb(rindex_PHTs),
+    .doutb(PHT_value)
+);
+
+pht_bram pht_way1(
+    .clka(clk),
+    .ena(1'b1),
+    .wea(pht_we),
+    .addra(pht_windex),
+    .dina(pht_wdata),
+    .clkb(clk),
+    .enb(1'b1),
+    .addrb(rindex_2_PHTs),
+    .doutb(PHT_value2)
+);
 
 always @(posedge clk) begin
     if(rst) begin
         BHT_value <= 2'b0;
         BHT_value2 <= 2'b0;
-        PHT_value <= 2'b0;
-        PHT_value2 <= 2'b0;
     end 
     else begin
         BHT_value <= BHT[rindex];
         BHT_value2 <= BHT[rindex_2];
-        PHT_value <= PHT[rindex_PHTs];
-        PHT_value2 <= PHT[rindex_2_PHTs];
     end
 end
 

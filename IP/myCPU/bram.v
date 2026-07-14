@@ -55,3 +55,34 @@ end
 
 
 endmodule
+
+module pht_bram (
+    input wire clka,
+    input wire ena,
+    input wire wea,
+    input wire [10:0] addra,
+    input wire [31:0] dina,
+    input wire clkb,
+    input wire enb,
+    input wire [10:0] addrb,
+    output reg [31:0] doutb
+);
+
+// 内存数组：2048个2
+reg [1:0] ram [0:2047];
+
+// 写操作：字节使能
+always @(posedge clka) begin
+    if (ena) begin
+        if (wea) ram[addra] <= dina;
+    end
+end
+
+always @(posedge clkb) begin
+    if(enb) begin
+        doutb <= ram[addrb]; 
+    end
+end
+
+
+endmodule

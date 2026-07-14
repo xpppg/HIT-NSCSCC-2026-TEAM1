@@ -32,8 +32,14 @@ module mycpu_core(
 wire [31:0] debug_r1;
 
 reg         reset;
+reg         clk_rst;
+wire        pht_rst;
 always @(posedge clk) begin
-    reset <= ~resetn;
+    clk_rst <= ~resetn;
+end
+
+always @(posedge clk) begin
+    reset <= clk_rst | pht_rst;
 end
 
 wire        inst_br;
@@ -337,6 +343,8 @@ assign BPU_rst = reset | tlb_remake | wb_ex | ertn_flush;
 BPU u_BPU(
     .clk           (clk),
     .rst           (BPU_rst),
+    .clk_rst       (clk_rst),
+    .pht_rst       (pht_rst),
     // read port
     .pc            (nextpc),
     .pred_target   (pred_target_pre_IF),
