@@ -5,13 +5,16 @@ module BPU(
     input  wire [31:0] pc,
     output wire [31:0] pred_target,
     output wire pred_hit1,
+    output wire [1:0] pred_pht,
 
     input  wire [31:0] pc2,
     output wire [31:0] pred_target_2,
     output wire pred_hit2,
+    output wire [1:0] pred_pht2,
     // 写端口    
     input  wire [31:0] br_pc,
     input  wire [31:0] br_target,
+    input  wire [ 1:0] br_pht,
     input  wire        inst_br,       
     input  wire        actual_taken
 );
@@ -43,12 +46,15 @@ wire PHT_taken_2;
         
         .pc          (pc),
         .PHT_taken  (PHT_taken),
+        .pred_pht   (pred_pht),
 
         .pc2         (pc2),
         .PHT_taken_2(PHT_taken_2),
+        .pred_pht2  (pred_pht2),
 
         .PHT_wen     (inst_br),
         .br_pc       (br_pc),
+        .br_pht      (br_pht),
         .actual_taken(actual_taken)
     );
 
@@ -237,14 +243,17 @@ module PHT(
     // 读端口
     input  wire [31:0] pc,
     output wire PHT_taken,
+    output wire [1:0] pred_pht,
     //output wire pred_jirl,
 
     input  wire [31:0] pc2,
     output wire PHT_taken_2,
+    output wire [1:0] pred_pht2,
     //output wire pred_jirl_2,
     // 写端口
     input  wire        PHT_wen,       
     input  wire [31:0] br_pc,
+    input  wire [ 1:0] br_pht,
     input  wire        actual_taken
     //input  wire        br_jirl
 );
@@ -272,8 +281,8 @@ reg  [1:0] BHT[1023:0];
 reg  [1:0] GHR;
 reg  [1:0] BHT_value;
 reg  [1:0] BHT_value2;
-reg        PHT_value;
-reg        PHT_value2;
+reg  [1:0] PHT_value;
+reg  [1:0] PHT_value2;
 //reg  JL[1023:0]; // 记录是否是jirl指令
 //reg  [19:0] JL_tag[1023:0]; // 记录jirl指令的tag
 
@@ -298,32 +307,39 @@ assign rindex_2_PHTs = {index_10_2, rindex_2};
 assign windex_PHTs = {index_10_3, windex};
 
 //WRITE
-integer i;
 integer j;
 always @(posedge clk) begin
     if(rst) begin
-        for(i = 0; i < 2048; i = i + 1) begin
-            PHT[i] = 2'b00; 
-        end
         for(j = 0; j < 1024; j = j + 1) begin
             BHT[j] = 2'b00; 
             //JL[j] <= 1'b0;
         end
     end 
     else if(PHT_wen) begin
-        if(actual_taken) begin
-            if(PHT[windex_PHTs] < 2'b11) begin
-                PHT[windex_PHTs] <= PHT[windex_PHTs] + 1'b1; 
-            end
-        end 
-        else begin
-            if(PHT[windex_PHTs] > 2'b00) begin
-                PHT[windex_PHTs] <= PHT[windex_PHTs] - 1'b1; 
-            end
-        end
         BHT[windex] <= {BHT[windex][0],actual_taken};
         //JL[RAS_windex] <= br_jirl;
         //JL_tag[RAS_windex] <= br_pc[31:12];
+    end
+end
+
+integer i;
+always @(posedge clk) begin
+    if(rst) begin
+        for(i = 0; i < 2048; i = i + 1) begin
+            PHT[i] = 2'b00; 
+        end
+    end 
+    else if(PHT_wen) begin
+        if(actual_taken) begin
+            if(br_pht < 2'b11) begin
+                PHT[windex_PHTs] <= br_pht + 1'b1; 
+            end
+        end 
+        else begin
+            if(br_pht > 2'b00) begin
+                PHT[windex_PHTs] <= br_pht - 1'b1; 
+            end
+        end
     end
 end
 
@@ -344,28 +360,27 @@ assign pred_taken_2 = (BHT[rindex_2] == 2'b11) ? 1'b1 :
 
 always @(posedge clk) begin
     if(rst) begin
-        //PHT_taken <= 1'b0;
-        //PHT_taken_2 <= 1'b0;
         BHT_value <= 2'b0;
         BHT_value2 <= 2'b0;
-        PHT_value <= 1'b0;
-        PHT_value2 <= 1'b0;
+        PHT_value <= 2'b0;
+        PHT_value2 <= 2'b0;
     end 
     else begin
-        //PHT_taken <= pred_taken;
-        //PHT_taken_2 <= pred_taken_2;
         BHT_value <= BHT[rindex];
         BHT_value2 <= BHT[rindex_2];
-        PHT_value <= PHT[rindex_PHTs][1];
-        PHT_value2 <= PHT[rindex_2_PHTs][1];
+        PHT_value <= PHT[rindex_PHTs];
+        PHT_value2 <= PHT[rindex_2_PHTs];
     end
 end
 
 assign PHT_taken = (BHT_value == 2'b11) ? 1'b1 :
-                  (BHT_value == 2'b00) ? 1'b0 : PHT_value;
+                  (BHT_value == 2'b00) ? 1'b0 : PHT_value[1];
 
 assign PHT_taken_2 = (BHT_value2 == 2'b11) ? 1'b1 :
-                     (BHT_value2 == 2'b00) ? 1'b0 : PHT_value2;
+                     (BHT_value2 == 2'b00) ? 1'b0 : PHT_value2[1];
+
+assign pred_pht = PHT_value;
+assign pred_pht2 = PHT_value2;
 
 //assign pred_jirl = JL[RAS_rindex] && (JL_tag[RAS_rindex] == pc[31:12]);
 //assign pred_jirl_2 = JL[RAS_rindex_2] && (JL_tag[RAS_rindex_2] == pc2[31:12]);

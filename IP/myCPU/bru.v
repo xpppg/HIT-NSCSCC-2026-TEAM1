@@ -5,11 +5,12 @@ module bru(
   input  wire [31:0] rd_value,
   input  wire [31:0] imm,
   input  wire [31:0] pc,
-  input  wire [32:0] pred_info,
+  input  wire [34:0] pred_info,
   
   output wire        inst_br,
   output wire        br_taken,
   output wire [31:0] br_target,
+  output wire [ 1:0] br_pht,
   output wire        actual_taken,
   output wire [31:0] actual_target
 );
@@ -25,6 +26,7 @@ wire inst_jirl;
 wire rj_smaller_rd;
 wire rj_smaller_rd_u;
 wire br_equal_pred;
+wire [1:0] pred_pht;
 wire pred_taken;
 wire [31:0] pred_target;
 wire br_target_wrong;
@@ -39,6 +41,7 @@ assign inst_b    = op[6];
 assign inst_bl   = op[7];
 assign inst_jirl = op[8];
 
+assign pred_pht = pred_info[34:33];
 assign pred_taken = pred_info[32];
 assign pred_target = pred_info[31:0];
 
@@ -62,5 +65,6 @@ assign br_target_wrong = (actual_target != pred_target) & actual_taken & pred_ta
 assign inst_br = inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu | inst_b | inst_bl | inst_jirl;
 assign br_taken = ((actual_taken & ~pred_taken) | (~actual_taken & pred_taken) | br_target_wrong) & en;
 assign br_target = actual_taken ? actual_target : (pc + 32'h4);
+assign br_pht = pred_pht;
 
 endmodule

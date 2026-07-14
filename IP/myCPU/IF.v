@@ -17,8 +17,10 @@ module IF(
     input wire sub_inst_valid,
     input wire pred_taken_pre_IF,
     input wire [31:0] pred_target_pre_IF,
+    input wire [1:0] pred_pht_pre_IF,
     input wire pred_taken_pre_IF_2,
     input wire [31:0] pred_target_pre_IF_2,
+    input wire [1:0] pred_pht2_pre_IF,
 
     input wire inst_sram_en,
     input wire inst_stall,
@@ -36,8 +38,10 @@ module IF(
     output wire [31:0] IF_inst2,
     output reg pred_taken_IF2,
     output reg [31:0] pred_target_IF2,
+    output reg [1:0] pred_pht_IF2,
     output reg pred_taken_IF2_2,
     output reg [31:0] pred_target_IF2_2,
+    output reg [1:0] pred_pht2_IF2,
 
     output wire pred_taken,
     output wire [31:0] pred_target
@@ -47,6 +51,8 @@ wire pred_taken_IF1;
 wire pred_taken_IF1_2;
 wire [31:0] pred_target_IF1;
 wire [31:0] pred_target_IF1_2;
+wire [1:0] pred_pht_IF1;
+wire [1:0] pred_pht2_IF1;
 wire sub_inst_valid_IF1;
 reg  sub_inst_valid_buf_IF1;
 
@@ -55,6 +61,8 @@ reg         pred_taken_buf;
 reg         pred_taken_buf_2;
 reg  [31:0] pred_target_buf;
 reg  [31:0] pred_target_buf_2;
+reg  [1:0]  pred_pht_buf;
+reg  [1:0]  pred_pht2_buf;
 
 always @(posedge clk) begin
     if(reset)
@@ -71,6 +79,8 @@ always @(posedge clk) begin
         pred_taken_buf_2 <= pred_taken_buf_2;
         pred_target_buf <= pred_target_buf;
         pred_target_buf_2 <= pred_target_buf_2;
+        pred_pht_buf <= pred_pht_buf;
+        pred_pht2_buf <= pred_pht2_buf;
     end
     else
     begin
@@ -78,6 +88,8 @@ always @(posedge clk) begin
         pred_taken_buf_2 <= pred_taken_pre_IF_2;
         pred_target_buf <= pred_target_pre_IF;
         pred_target_buf_2 <= pred_target_pre_IF_2;
+        pred_pht_buf <= pred_pht_pre_IF;
+        pred_pht2_buf <= pred_pht2_pre_IF;
     end
 end
 
@@ -85,6 +97,8 @@ assign pred_taken_IF1 = pred_buf_sel ? pred_taken_buf : pred_taken_pre_IF;
 assign pred_taken_IF1_2 = pred_buf_sel ? pred_taken_buf_2 : pred_taken_pre_IF_2;
 assign pred_target_IF1 = pred_buf_sel ? pred_target_buf : pred_target_pre_IF;
 assign pred_target_IF1_2 = pred_buf_sel ? pred_target_buf_2 : pred_target_pre_IF_2;
+assign pred_pht_IF1 = pred_buf_sel ? pred_pht_buf : pred_pht_pre_IF;
+assign pred_pht2_IF1 = pred_buf_sel ? pred_pht2_buf : pred_pht2_pre_IF;
 
 assign pred_taken = (pred_taken_IF1 & IF1_valid) | (pred_taken_IF1_2 & sub_inst_valid_IF1);
 assign pred_target = pred_taken_IF1 ? pred_target_IF1 : pred_target_IF1_2;
@@ -130,8 +144,10 @@ always @(posedge clk) begin
 
         pred_taken_IF2 <= pred_taken_IF1;
         pred_target_IF2 <= pred_target_IF1;
+        pred_pht_IF2 <= pred_pht_IF1;
         pred_taken_IF2_2 <= pred_taken_IF1_2 & sub_inst_valid_IF1;
         pred_target_IF2_2 <= pred_target_IF1_2;
+        pred_pht2_IF2 <= pred_pht2_IF1;
     end
     else if(IF2_ready_go & ID_allowin)
     begin

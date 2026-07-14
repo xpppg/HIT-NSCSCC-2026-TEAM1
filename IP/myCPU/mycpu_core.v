@@ -39,6 +39,7 @@ end
 wire        inst_br;
 wire        br_taken;
 wire [31:0] br_target;
+wire [ 1:0] br_pht;
 
 wire [31:0] ID_inst;
 wire [31:0] ID_inst2;
@@ -270,6 +271,10 @@ wire pred_taken_IF2;
 reg  pred_taken_IS;
 wire pred_taken_pre_IF_2;
 wire pred_taken_IF2_2;
+wire [1:0] pred_pht_pre_IF;
+wire [1:0] pred_pht2_pre_IF;
+wire [1:0] pred_pht_IF2;
+wire [1:0] pred_pht2_IF2;
 wire [31:0] pred_target;
 wire [31:0] pred_target_pre_IF;
 wire [31:0] pred_target_IF2;
@@ -336,13 +341,16 @@ BPU u_BPU(
     .pc            (nextpc),
     .pred_target   (pred_target_pre_IF),
     .pred_hit1     (pred_taken_pre_IF),
+    .pred_pht      (pred_pht_pre_IF),
 
     .pc2           (nextpc + 32'h4),
     .pred_target_2 (pred_target_pre_IF_2),
     .pred_hit2     (pred_taken_pre_IF_2),
+    .pred_pht2     (pred_pht2_pre_IF),
     // write port  
     .br_pc         (pc_buf_MEM),
     .br_target     (actual_target),
+    .br_pht        (br_pht),
     .inst_br       (inst_br),
     .actual_taken  (actual_taken)
 );
@@ -366,8 +374,10 @@ IF u_IF(
     .sub_inst_valid(sub_inst_valid),
     .pred_taken_pre_IF (pred_taken_pre_IF),
     .pred_target_pre_IF (pred_target_pre_IF),
+    .pred_pht_pre_IF (pred_pht_pre_IF),
     .pred_taken_pre_IF_2 (pred_taken_pre_IF_2),
     .pred_target_pre_IF_2 (pred_target_pre_IF_2),
+    .pred_pht2_pre_IF (pred_pht2_pre_IF),
 
     .inst_sram_en (inst_sram_en),
     .inst_stall   (fetch_stall   ),
@@ -385,8 +395,10 @@ IF u_IF(
     .IF_inst2     (IF_inst2    ),
     .pred_taken_IF2 (pred_taken_IF2),
     .pred_target_IF2 (pred_target_IF2),
+    .pred_pht_IF2 (pred_pht_IF2),
     .pred_taken_IF2_2 (pred_taken_IF2_2),
     .pred_target_IF2_2 (pred_target_IF2_2),
+    .pred_pht2_IF2 (pred_pht2_IF2),
 
     .pred_taken   (pred_taken  ),
     .pred_target  (pred_target )
@@ -395,8 +407,8 @@ IF u_IF(
 //ID级流水线缓存
 wire [31:0] pc_buf_ID;
 wire [31:0] pc_buf_ID2;
-wire [32:0] id_pred_info;
-wire [32:0] id_pred_info_2;
+wire [34:0] id_pred_info;
+wire [34:0] id_pred_info_2;
 wire [15:0] id_ex_info_buf;
 wire [15:0] id_ex_info_buf_2;
 
@@ -407,13 +419,13 @@ fetch_buffer fetch_buffer(
     .wr(IF2_ready_go & IF2_valid),
     .pc_buf_IF(pc_buf_IF2  ),
     .IF_inst   (IF_inst     ),
-    .if_pred_info({pred_taken_IF2, pred_target_IF2}),
+    .if_pred_info({pred_pht_IF2, pred_taken_IF2, pred_target_IF2}),
     .if_ex_info({wb_esubcode_IF, wb_ecode_IF, wb_ex_IF}),
 
     .wr2(IF2_ready_go & IF2_valid & sub_inst_valid_IF2),
     .pc_buf_IF2(pc_buf_IF2 + 32'h4),
     .IF_inst2   (IF_inst2     ),
-    .if_pred_info_2({pred_taken_IF2_2, pred_target_IF2_2}),
+    .if_pred_info_2({pred_pht2_IF2, pred_taken_IF2_2, pred_target_IF2_2}),
     .if_ex_info_2(16'b0),
 
     .ID_allowin(ID_allowin),
@@ -516,8 +528,8 @@ reg        is_inst_normal_2;
 //buf
 reg [15:0] is_ex_info_buf;
 reg [15:0] is_ex_info_buf_2;
-reg [32:0] is_pred_info;
-reg [32:0] is_pred_info_2;
+reg [34:0] is_pred_info;
+reg [34:0] is_pred_info_2;
 
 wire [31:0] is_csr_rvalue;
 wire [31:0] is_csr_rvalue_2;
@@ -822,7 +834,7 @@ reg        ex_csr_we;
 reg [15:0] ex_ex_info_buf;
 reg        ex_turning;
 
-reg [32:0] ex_pred_info;
+reg [34:0] ex_pred_info;
 
 wire        ex_mmu_en;
 wire [31:0] ex_mem_vaddr;
@@ -851,6 +863,7 @@ wire [15:0] ex_mmu_ex_info;
 wire        ex_inst_br;
 wire        ex_br_taken;
 wire [31:0] ex_br_target;
+wire [ 1:0] ex_br_pht;
 wire        ex_actual_taken;
 wire [31:0] ex_actual_target;
 
@@ -995,6 +1008,7 @@ bru u_bru(
     .inst_br(ex_inst_br),
     .br_taken(ex_br_taken    ),
     .br_target(ex_br_target),
+    .br_pht(ex_br_pht),
     .actual_taken(ex_actual_taken  ),
     .actual_target(ex_actual_target)
     );
@@ -1086,10 +1100,11 @@ reg        wb_is_tlbr0;//用于区分出错的vaddr
 reg        wb_inst_br;
 reg        wb_br_taken;
 reg [31:0] wb_br_target;
+reg [ 1:0] wb_br_pht;
 reg        wb_actual_taken;
 reg [31:0] wb_actual_target;
 
-// MEM阶段流水线缓�?
+// MEM阶段流水线缓存
 always @(posedge clk) begin
     if(reset | wb_ex | ertn_flush | br_taken) 
     begin
@@ -1136,6 +1151,7 @@ always @(posedge clk) begin
         wb_inst_br                <= ex_inst_br;
         wb_br_taken               <= ex_br_taken;
         wb_br_target              <= ex_br_target;
+        wb_br_pht                 <= ex_br_pht;
         wb_actual_taken           <= ex_actual_taken;
         wb_actual_target          <= ex_actual_target;
         `ifdef DIFFTEST_EN
@@ -1188,6 +1204,7 @@ assign ertn_flush = wb_ertn & ~wb_ex & MEM_ready_go & WB_allowin & MEM_valid;
 assign inst_br = wb_inst_br & MEM_ready_go & WB_allowin & MEM_valid & ~wb_ex & ~wb_ertn;
 assign br_taken = wb_br_taken & MEM_ready_go & WB_allowin & MEM_valid & ~wb_ex & ~wb_ertn;
 assign br_target = wb_br_target;
+assign br_pht = wb_br_pht;
 assign actual_taken = wb_actual_taken & MEM_ready_go & WB_allowin & MEM_valid & ~wb_ex & ~wb_ertn;
 assign actual_target = wb_actual_target;
 
