@@ -382,12 +382,12 @@ IF u_IF(
 
     .nextpc       (nextpc      ),
     .sub_inst_valid(sub_inst_valid),
-    .pred_taken_pre_IF (pred_taken_pre_IF),
-    .pred_target_pre_IF (pred_target_pre_IF),
-    .pred_pht_pre_IF (pred_pht_pre_IF),
-    .pred_taken_pre_IF_2 (pred_taken_pre_IF_2),
-    .pred_target_pre_IF_2 (pred_target_pre_IF_2),
-    .pred_pht2_pre_IF (pred_pht2_pre_IF),
+    .pred_taken_pre_IF_in (pred_taken_pre_IF),
+    .pred_target_pre_IF_in (pred_target_pre_IF),
+    .pred_pht_pre_IF_in (pred_pht_pre_IF),
+    .pred_taken_pre_IF_2_in (pred_taken_pre_IF_2),
+    .pred_target_pre_IF_2_in (pred_target_pre_IF_2),
+    .pred_pht2_pre_IF_in (pred_pht2_pre_IF),
 
     .inst_sram_en (inst_sram_en),
     .inst_stall   (fetch_stall   ),

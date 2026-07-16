@@ -15,12 +15,12 @@ module IF(
 
     input wire [31:0] nextpc,
     input wire sub_inst_valid,
-    input wire pred_taken_pre_IF,
-    input wire [31:0] pred_target_pre_IF,
-    input wire [1:0] pred_pht_pre_IF,
-    input wire pred_taken_pre_IF_2,
-    input wire [31:0] pred_target_pre_IF_2,
-    input wire [1:0] pred_pht2_pre_IF,
+    input wire pred_taken_pre_IF_in,
+    input wire [31:0] pred_target_pre_IF_in,
+    input wire [1:0] pred_pht_pre_IF_in,
+    input wire pred_taken_pre_IF_2_in,
+    input wire [31:0] pred_target_pre_IF_2_in,
+    input wire [1:0] pred_pht2_pre_IF_in,
 
     input wire inst_sram_en,
     input wire inst_stall,
@@ -58,13 +58,58 @@ wire sub_inst_valid_IF1;
 reg  sub_inst_valid_buf_IF1;
 
 reg         pred_buf_sel;
+
+wire pred_taken_pre_IF;
+wire [31:0] pred_target_pre_IF;
+wire [1:0] pred_pht_pre_IF;
+wire pred_taken_pre_IF_2;
+wire [31:0] pred_target_pre_IF_2;
+wire [1:0] pred_pht2_pre_IF;
+//读保持
+reg        pred_info_sel;
 reg         pred_taken_buf;
 reg         pred_taken_buf_2;
 reg  [31:0] pred_target_buf;
 reg  [31:0] pred_target_buf_2;
 reg  [1:0]  pred_pht_buf;
 reg  [1:0]  pred_pht2_buf;
+always @(posedge clk) begin
+    if(reset)
+        pred_info_sel <= 1'b0;
+    else if(~IF1_allowin & ~pred_info_sel)
+        pred_info_sel <= 1'b1;
+    else if(IF1_ready_go & IF2_allowin)
+        pred_info_sel <= 1'b0;
+end
+always @(posedge clk) begin
+    if(pred_info_sel)
+    begin
+        pred_taken_buf <= pred_taken_buf;
+        pred_taken_buf_2 <= pred_taken_buf_2;
+        pred_target_buf <= pred_target_buf;
+        pred_target_buf_2 <= pred_target_buf_2;
+        pred_pht_buf <= pred_pht_buf;
+        pred_pht2_buf <= pred_pht2_buf;
+    end
+    else
+    begin
+        pred_taken_buf <= pred_taken_pre_IF_in;
+        pred_taken_buf_2 <= pred_taken_pre_IF_2_in;
+        pred_target_buf <= pred_target_pre_IF_in;
+        pred_target_buf_2 <= pred_target_pre_IF_2_in;
+        pred_pht_buf <= pred_pht_pre_IF_in;
+        pred_pht2_buf <= pred_pht2_pre_IF_in;
+    end
+end
 
+assign pred_taken_pre_IF = pred_info_sel ? pred_taken_buf : pred_taken_pre_IF_in;
+assign pred_target_pre_IF = pred_info_sel ? pred_target_buf : pred_target_pre_IF_in;
+assign pred_pht_pre_IF = pred_info_sel ? pred_pht_buf : pred_pht_pre_IF_in;
+assign pred_taken_pre_IF_2 = pred_info_sel ? pred_taken_buf_2 : pred_taken_pre_IF_2_in;
+assign pred_target_pre_IF_2 = pred_info_sel ? pred_target_buf_2 : pred_target_pre_IF_2_in;
+assign pred_pht2_pre_IF = pred_info_sel ? pred_pht2_buf : pred_pht2_pre_IF_in;
+
+//分支预测延迟一周期给pre_IF
 always @(posedge clk) begin
     if(reset)
     begin
