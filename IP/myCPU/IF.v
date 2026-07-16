@@ -163,7 +163,7 @@ reg  [31:0] IF_inst2_buf;
 always @(posedge clk) begin
     if(reset)
         IF_inst_sel <= 1'b0;
-    else if(~ID_allowin & ~inst_stall & ~IF_inst_sel)
+    else if(IF2_valid & ~ID_allowin & ~inst_stall & ~IF_inst_sel)
         IF_inst_sel <= 1'b1;
     else if(IF2_ready_go & ID_allowin)
         IF_inst_sel <= 1'b0;

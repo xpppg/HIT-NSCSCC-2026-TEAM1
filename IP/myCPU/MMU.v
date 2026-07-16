@@ -5,8 +5,8 @@ module MMU(
     input wire        ertn_flush,
     input wire        tlb_remake,
     input wire        br_taken,
-    input wire        pre_IF_ready_go,
-    input wire        IF1_allowin,
+    input wire        IF1_ready_go,
+    input wire        IF2_allowin,
     input wire        IF1_valid,
     input wire        EXE_ready_go,
     input wire        MEM_allowin,
@@ -23,8 +23,8 @@ module MMU(
     input wire [31:0] tlbelo1_rvalue,
     
     input  wire        inst_en,
-    input  wire [31:0] nextpc,
     input  wire [31:0] pc_buf_IF1,
+    output wire        fetch_wating,
     output wire        inst_sram_en,
     output wire [31:0] inst_sram_addr,
 
@@ -68,14 +68,14 @@ wire [ 8:0] mmu_esubcode;
 wire [ 18:0] s0_vppn;
 wire s0_va_bit12;
 wire [ 9:0] s0_asid;
-wire s0_found_pre_IF;
-wire [ 3:0] s0_index_pre_IF;
-wire [ 19:0] s0_ppn_pre_IF;
-wire [ 5:0] s0_ps_pre_IF;
-wire [ 1:0] s0_plv_pre_IF;
-wire [ 1:0] s0_mat_pre_IF;
-wire s0_d_pre_IF;
-wire s0_v_pre_IF;
+wire s0_found_IF1;
+wire [ 3:0] s0_index_IF1;
+wire [ 19:0] s0_ppn_IF1;
+wire [ 5:0] s0_ps_IF1;
+wire [ 1:0] s0_plv_IF1;
+wire [ 1:0] s0_mat_IF1;
+wire s0_d_IF1;
+wire s0_v_IF1;
 reg  s0_found;
 reg  [ 3:0] s0_index;
 reg  [ 19:0] s0_ppn;
@@ -142,6 +142,7 @@ wire   csr_pg;
 wire   [1:0] csr_plv;
 
 //used for tlb waiting
+reg  tlb_l2_ready_fetch;
 reg  tlb_l2_ready;
 reg  s1_found_l2;
 reg  [ 3:0] s1_index_l2;
@@ -158,6 +159,7 @@ assign csr_plv = csr_crmd[1:0];
 
 always @(posedge clk) begin
     if(reset) begin
+        tlb_l2_ready_fetch <= 1'b0;
         s0_found <= 1'b0;
         s0_index <= 4'b0;
         s0_ppn   <= 20'b0;
@@ -167,16 +169,20 @@ always @(posedge clk) begin
         s0_d     <= 1'b0;
         s0_v     <= 1'b0;
     end
-    else if(pre_IF_ready_go & IF1_allowin)
+    else if(fetch_wating & ~tlb_l2_ready_fetch)
     begin
-        s0_found <= s0_found_pre_IF;
-        s0_index <= s0_index_pre_IF;
-        s0_ppn   <= s0_ppn_pre_IF;
-        s0_ps    <= s0_ps_pre_IF;
-        s0_plv   <= s0_plv_pre_IF;
-        s0_mat   <= s0_mat_pre_IF;
-        s0_d     <= s0_d_pre_IF;
-        s0_v     <= s0_v_pre_IF;
+        tlb_l2_ready_fetch <= 1'b1;
+        s0_found <= s0_found_IF1;
+        s0_index <= s0_index_IF1;
+        s0_ppn   <= s0_ppn_IF1;
+        s0_ps    <= s0_ps_IF1;
+        s0_plv   <= s0_plv_IF1;
+        s0_mat   <= s0_mat_IF1;
+        s0_d     <= s0_d_IF1;
+        s0_v     <= s0_v_IF1;
+    end
+    else if(IF1_ready_go & IF2_allowin) begin
+        tlb_l2_ready_fetch <= 1'b0;
     end
 end
 
@@ -208,11 +214,11 @@ always @(posedge clk) begin
     end
 end
 
+assign fetch_wating = ~tlb_l2_ready_fetch & inst_en & IF1_valid & ~inst_addr_sel0 & ~inst_addr_sel1_0 & ~inst_addr_sel1_1 & ~wb_ex & ~ertn_flush & ~tlb_remake & ~br_taken;
 assign mmu_wating = ~tlb_l2_ready & ex_lsu_en & ~data_addr_sel0 & ~data_addr_sel1_0 & ~data_addr_sel1_1 ;
 
-
-assign s0_vppn     = nextpc[31:13];
-assign s0_va_bit12 = nextpc[12];
+assign s0_vppn     = pc_buf_IF1[31:13];
+assign s0_va_bit12 = pc_buf_IF1[12];
 assign s0_asid     = csr_asid;
 
 wire inst_tlbsrch;
@@ -274,14 +280,14 @@ tlb u_tlb(
     .s0_vppn    (s0_vppn),
     .s0_va_bit12(s0_va_bit12),
     .s0_asid    (s0_asid),
-    .s0_found   (s0_found_pre_IF),
-    .s0_index   (s0_index_pre_IF),
-    .s0_ppn     (s0_ppn_pre_IF),
-    .s0_ps      (s0_ps_pre_IF),
-    .s0_plv     (s0_plv_pre_IF),
-    .s0_mat     (s0_mat_pre_IF),
-    .s0_d       (s0_d_pre_IF),
-    .s0_v       (s0_v_pre_IF),
+    .s0_found   (s0_found_IF1),
+    .s0_index   (s0_index_IF1),
+    .s0_ppn     (s0_ppn_IF1),
+    .s0_ps      (s0_ps_IF1),
+    .s0_plv     (s0_plv_IF1),
+    .s0_mat     (s0_mat_IF1),
+    .s0_d       (s0_d_IF1),
+    .s0_v       (s0_v_IF1),
     // search port 1 (for load/store)
     .s1_vppn    (s1_vppn),
     .s1_va_bit12(s1_va_bit12),
@@ -379,7 +385,7 @@ assign inst_addr_v = inst_addr_sel0 | inst_addr_sel1_0 | inst_addr_sel1_1 | inst
 assign inst_sram_addr  = inst_addr_sel0 ? inst_addr0 :
                          inst_addr_sel1_0 ? inst_addr1_0 :
                          inst_addr_sel1_1 ? inst_addr1_1 : inst_addr2;
-assign inst_sram_en   = inst_en & inst_addr_v & ~wb_ex & ~ertn_flush & ~tlb_remake & ~br_taken;
+assign inst_sram_en   = inst_en & inst_addr_v & ~wb_ex & ~ertn_flush & ~tlb_remake & ~br_taken & IF1_ready_go & IF2_allowin;
 
 
 
@@ -399,7 +405,7 @@ assign data_addr_v = data_addr_sel0 | data_addr_sel1_0 | data_addr_sel1_1 | data
 assign data_sram_addr  = data_addr_sel0 ? data_addr0 :
                          data_addr_sel1_0 ? data_addr1_0 :
                          data_addr_sel1_1 ? data_addr1_1 : data_addr2;
-assign data_sram_en   = ex_lsu_en & data_addr_v & EXE_ready_go & MEM_allowin & ~br_taken;
+assign data_sram_en   = ex_lsu_en & data_addr_v & EXE_ready_go & MEM_allowin;
 
 assign dcache_v_0 = (csr_crmd[8:7] == 2'b01); 
 assign dcache_v_1_0 = (csr_dmw0[5:4] == 2'b01);

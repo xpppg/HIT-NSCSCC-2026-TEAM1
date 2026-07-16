@@ -176,6 +176,7 @@ wire MEM_ready_go_2;
 wire WB_ready_go;
 wire div_wating;
 wire mmu_wating;
+wire fetch_wating;
 wire rf_we_wating;
 wire rf_we_wating_2;
 wire IF1_allowin;
@@ -230,16 +231,16 @@ wire [31:0] EXE_forward_result_2;
 
 //阻塞逻辑判断
 assign pre_IF_ready_go = ~fetch_stall ;
-assign IF1_ready_go =  ~fetch_stall;
+assign IF1_ready_go =  ~fetch_stall & ~fetch_wating;
 assign IF2_ready_go = ~fetch_stall;
 
-assign ID_ready_go =  ~cpu_stall;
+assign ID_ready_go =  ~cpu_stall & ~peu_wating3;
 assign IS_ready_go =  ~cpu_stall & ~rf_we_wating & ~peu_wating;
 assign EXE_ready_go = ~div_wating & ~sub_div_wating & ~cpu_stall & ~mmu_wating;
 assign MEM_ready_go = ~cpu_stall;
 assign WB_ready_go  = 1'b1;
 
-assign ID_ready_go_2 = ~cpu_stall;
+assign ID_ready_go_2 = ~cpu_stall & ~peu_wating3;
 assign IS_ready_go_2 = ~cpu_stall & ~inst_waiting & ~is_raw_wating & ~rf_we_wating_2 & ~peu_wating2;
 
 assign IF1_allowin = (IF1_ready_go & IF2_allowin) | ~IF1_valid;
@@ -800,12 +801,14 @@ wire inst_waiting;
 wire is_raw_wating;
 wire peu_wating;
 wire peu_wating2;
+wire peu_wating3;
 
 assign IS_to_EXE_inst = ((is_inst_normal & ~is_inst_normal_2) | ~IS_valid) & sub_IS_valid; //0为第0条指令，1为第1条指�?
 assign inst_waiting = (~is_inst_normal & ~is_inst_normal_2) & IS_valid & sub_IS_valid;//结构冲突
 assign is_raw_wating = (is_dest == is_r3 | is_dest == is_r4) & is_dest_we & IS_valid;//同级（IS）数据冲�?
 assign peu_wating = ex_csr_we & EXE_valid | wb_csr_we & MEM_valid;
 assign peu_wating2 = is_csr_we & IS_valid | ex_csr_we & EXE_valid | wb_csr_we & MEM_valid;
+assign peu_wating3 = is_csr_we_2 & sub_IS_valid | is_csr_we & IS_valid | ex_csr_we & EXE_valid | wb_csr_we & MEM_valid;
 
 wire [31:0] is_src1;
 wire [31:0] is_src2;
@@ -1296,8 +1299,8 @@ assign tlb_remake = 1'b0;
         .ertn_flush        (ertn_flush         ),
         .tlb_remake        (tlb_remake         ),
         .br_taken          (br_taken           ),
-        .pre_IF_ready_go   (pre_IF_ready_go    ),
-        .IF1_allowin       (IF1_allowin        ),
+        .IF1_ready_go      (IF1_ready_go        ),
+        .IF2_allowin       (IF2_allowin        ),
         .IF1_valid         (IF1_valid          ),
         .EXE_ready_go      (EXE_ready_go       ),
         .MEM_allowin       (MEM_allowin        ),
@@ -1314,8 +1317,8 @@ assign tlb_remake = 1'b0;
         .tlbidx_rvalue    (tlbidx_rvalue     ),
 
         .inst_en          (inst_en           ),
-        .nextpc           (nextpc            ),
         .pc_buf_IF1       (pc_buf_IF1        ),
+        .fetch_wating     (fetch_wating      ),
         .inst_sram_en     (inst_sram_en      ),
         .inst_sram_addr   (inst_sram_addr    ),
 
