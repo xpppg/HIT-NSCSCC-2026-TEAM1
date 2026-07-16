@@ -176,6 +176,7 @@ wire MEM_ready_go_2;
 wire WB_ready_go;
 wire div_wating;
 wire mmu_wating;
+wire pred_wating;
 wire fetch_wating;
 wire rf_we_wating;
 wire rf_we_wating_2;
@@ -231,7 +232,7 @@ wire [31:0] EXE_forward_result_2;
 
 //阻塞逻辑判断
 assign pre_IF_ready_go = ~fetch_stall ;
-assign IF1_ready_go =  ~fetch_stall & ~fetch_wating;
+assign IF1_ready_go =  ~fetch_stall & ~fetch_wating & ~pred_wating;
 assign IF2_ready_go = ~fetch_stall;
 
 assign ID_ready_go =  ~cpu_stall & ~peu_wating3;
@@ -352,7 +353,7 @@ BPU u_BPU(
     .pred_hit1     (pred_taken_pre_IF),
     .pred_pht      (pred_pht_pre_IF),
 
-    .pc2           (nextpc + 32'h4),
+    .pc2           ({nextpc[31:6],{nextpc[5:0]+4'h4}}),//nextpc + 32'h4
     .pred_target_2 (pred_target_pre_IF_2),
     .pred_hit2     (pred_taken_pre_IF_2),
     .pred_pht2     (pred_pht2_pre_IF),
@@ -410,7 +411,8 @@ IF u_IF(
     .pred_pht2_IF2 (pred_pht2_IF2),
 
     .pred_taken   (pred_taken  ),
-    .pred_target  (pred_target )
+    .pred_target  (pred_target ),
+    .pred_wating  (pred_wating )
 );
 
 //ID级流水线缓存
