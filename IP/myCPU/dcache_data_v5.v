@@ -61,7 +61,7 @@ module dcache_data_v5(
     data_bram_bank bank0_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[0]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[0]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[31:0]:sram_wdata),    // 32
         .douta(rdata_way0[0])    //32
@@ -69,7 +69,7 @@ module dcache_data_v5(
     data_bram_bank bank1_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[1]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[1]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[63:32]:sram_wdata),    // 32
         .douta(rdata_way0[1])    //32
@@ -77,7 +77,7 @@ module dcache_data_v5(
     data_bram_bank bank2_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[2]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[2]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[95:64]:sram_wdata),    // 32
         .douta(rdata_way0[2])    //32
@@ -85,7 +85,7 @@ module dcache_data_v5(
     data_bram_bank bank3_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[3]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[3]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[127:96]:sram_wdata),    // 32
         .douta(rdata_way0[3])    //32
@@ -93,7 +93,7 @@ module dcache_data_v5(
     data_bram_bank bank4_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[4]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[4]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[159:128]:sram_wdata),    // 32
         .douta(rdata_way0[4])    //32
@@ -101,7 +101,7 @@ module dcache_data_v5(
     data_bram_bank bank5_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[5]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[5]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[191:160]:sram_wdata),    // 32
         .douta(rdata_way0[5])    //32
@@ -109,7 +109,7 @@ module dcache_data_v5(
     data_bram_bank bank6_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[6]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[6]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[223:192]:sram_wdata),    // 32
         .douta(rdata_way0[6])    //32
@@ -117,7 +117,7 @@ module dcache_data_v5(
     data_bram_bank bank7_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[7]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[7]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[255:224]:sram_wdata),    // 32
         .douta(rdata_way0[7])    //32
@@ -125,7 +125,7 @@ module dcache_data_v5(
     data_bram_bank bank8_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[8]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[8]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[287:256]:sram_wdata),    // 32
         .douta(rdata_way0[8])    //32
@@ -133,7 +133,7 @@ module dcache_data_v5(
     data_bram_bank bank9_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[9]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[9]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[319:288]:sram_wdata),    // 32
         .douta(rdata_way0[9])    //32
@@ -141,7 +141,7 @@ module dcache_data_v5(
     data_bram_bank bank10_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[10]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[10]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[351:320]:sram_wdata),    // 32
         .douta(rdata_way0[10])    //32
@@ -149,7 +149,7 @@ module dcache_data_v5(
     data_bram_bank bank11_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[11]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[11]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[383:352]:sram_wdata),    // 32
         .douta(rdata_way0[11])    //32
@@ -157,7 +157,7 @@ module dcache_data_v5(
     data_bram_bank bank12_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[12]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[12]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[415:384]:sram_wdata),    // 32
         .douta(rdata_way0[12])    //32
@@ -165,7 +165,7 @@ module dcache_data_v5(
     data_bram_bank bank13_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[13]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[13]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[447:416]:sram_wdata),    // 32
         .douta(rdata_way0[13])    //32
@@ -173,7 +173,7 @@ module dcache_data_v5(
     data_bram_bank bank14_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[14]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[14]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[479:448]:sram_wdata),    // 32
         .douta(rdata_way0[14])    //32
@@ -181,7 +181,7 @@ module dcache_data_v5(
     data_bram_bank bank15_way0(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b0000:4'b1111:write_back?4'b0000:sram_en&bank_sel[15]&hit[0]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[15]&hit[0]?sram_wen:(refresh&~lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[511:480]:sram_wdata),    // 32
         .douta(rdata_way0[15])    //32
@@ -192,7 +192,7 @@ module dcache_data_v5(
     data_bram_bank bank0_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[0]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[0]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[31:0]:sram_wdata),    // 32
         .douta(rdata_way1[0])    //32
@@ -200,7 +200,7 @@ module dcache_data_v5(
     data_bram_bank bank1_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[1]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[1]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[63:32]:sram_wdata),    // 32
         .douta(rdata_way1[1])    //32
@@ -208,7 +208,7 @@ module dcache_data_v5(
     data_bram_bank bank2_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[2]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[2]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[95:64]:sram_wdata),    // 32
         .douta(rdata_way1[2])    //32
@@ -216,7 +216,7 @@ module dcache_data_v5(
     data_bram_bank bank3_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[3]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[3]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[127:96]:sram_wdata),    // 32
         .douta(rdata_way1[3])    //32
@@ -224,7 +224,7 @@ module dcache_data_v5(
     data_bram_bank bank4_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[4]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[4]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[159:128]:sram_wdata),    // 32
         .douta(rdata_way1[4])    //32
@@ -232,7 +232,7 @@ module dcache_data_v5(
     data_bram_bank bank5_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[5]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[5]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[191:160]:sram_wdata),    // 32
         .douta(rdata_way1[5])    //32
@@ -240,7 +240,7 @@ module dcache_data_v5(
     data_bram_bank bank6_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[6]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[6]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[223:192]:sram_wdata),    // 32
         .douta(rdata_way1[6])    //32
@@ -248,7 +248,7 @@ module dcache_data_v5(
     data_bram_bank bank7_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[7]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[7]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[255:224]:sram_wdata),    // 32
         .douta(rdata_way1[7])    //32
@@ -256,7 +256,7 @@ module dcache_data_v5(
     data_bram_bank bank8_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[8]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[8]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[287:256]:sram_wdata),    // 32
         .douta(rdata_way1[8])    //32
@@ -264,7 +264,7 @@ module dcache_data_v5(
     data_bram_bank bank9_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[9]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[9]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[319:288]:sram_wdata),    // 32
         .douta(rdata_way1[9])    //32
@@ -272,7 +272,7 @@ module dcache_data_v5(
     data_bram_bank bank10_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[10]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[10]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[351:320]:sram_wdata),    // 32
         .douta(rdata_way1[10])    //32
@@ -280,7 +280,7 @@ module dcache_data_v5(
     data_bram_bank bank11_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[11]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[11]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[383:352]:sram_wdata),    // 32
         .douta(rdata_way1[11])    //32
@@ -288,7 +288,7 @@ module dcache_data_v5(
     data_bram_bank bank12_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[12]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[12]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[415:384]:sram_wdata),    // 32
         .douta(rdata_way1[12])    //32
@@ -296,7 +296,7 @@ module dcache_data_v5(
     data_bram_bank bank13_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[13]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[13]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[447:416]:sram_wdata),    // 32
         .douta(rdata_way1[13])    //32
@@ -304,7 +304,7 @@ module dcache_data_v5(
     data_bram_bank bank14_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[14]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[14]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[479:448]:sram_wdata),    // 32
         .douta(rdata_way1[14])    //32
@@ -312,7 +312,7 @@ module dcache_data_v5(
     data_bram_bank bank15_way1(
         .clka(clk),
         .ena(1'b1),     // 1
-        .wea(refresh?lru?4'b1111:4'b0000:write_back?4'b0000:sram_en&bank_sel[15]&hit[1]?sram_wen:4'b0000),     // 4
+        .wea(bank_sel[15]&hit[1]?sram_wen:(refresh&lru)?4'b1111:4'b0000),     // 4
         .addra(index),   // 7
         .dina(refresh?cacheline_new[511:480]:sram_wdata),    // 32
         .douta(rdata_way1[15])    //32

@@ -84,11 +84,11 @@ module BTB(
     // 读端口
     input  wire [31:0] pc,
     output wire [31:0] pred_target,
-    output reg  BTB_hit1,
+    output wire BTB_hit1,
 
     input  wire [31:0] pc2,
     output wire [31:0] pred_target_2,
-    output reg  BTB_hit2,
+    output wire BTB_hit2,
     // 写端口
     input  wire        BTB_wen,       
     input  wire [31:0] br_pc,
@@ -98,12 +98,24 @@ reg  timer;//伪随机数发生器
 wire [9:0] rindex;
 wire [9:0] rindex_2;
 wire [9:0] windex;
+wire v_way0;
+wire v2_way0;
+wire v_way1;
+wire v2_way1;
+reg  v_way0_buf;
+reg  v2_way0_buf;
+reg  v_way1_buf;
+reg  v2_way1_buf;
+reg  [7:0] PC_tag;
+reg  [7:0] PC2_tag;
 //reg  [31:0] BTB_way0[1023:0];
 //reg  [31:0] BTB_way1[1023:0];
 reg  [1023:0] BTB_v_0;
 reg  [1023:0] BTB_v_1;
-reg  [7:0] BTB_tag_way0[1023:0];
-reg  [7:0] BTB_tag_way1[1023:0];
+wire [7:0] tag_way0;
+wire [7:0] tag2_way0;
+wire [7:0] tag_way1;
+wire [7:0] tag2_way1;
 
 wire tag_hit;
 wire tag_hit_2;
@@ -112,8 +124,8 @@ assign rindex   = pc[11:2];
 assign rindex_2 = pc2[11:2];
 assign windex   = br_pc[11:2];
 
-reg r_sel0;
-reg r2_sel0;
+wire r_sel0;
+wire r2_sel0;
 wire [31:0] rdata_way0;
 wire [31:0] rdata_way1;
 wire [31:0] rdata2_way0;
@@ -139,14 +151,14 @@ always @(posedge clk) begin
         if(~BTB_v_0[windex]) begin
             //BTB_way0[windex] <= br_target;
             BTB_v_0[windex] <= 1'b1;
-            BTB_tag_way0[windex] <= br_pc[19:12];
+            //BTB_tag_way0[windex] <= br_pc[19:12];
         end
         else if(~BTB_v_1[windex]) begin
             //BTB_way1[windex] <= br_target;
             BTB_v_1[windex] <= 1'b1;
-            BTB_tag_way1[windex] <= br_pc[19:12];
+            //BTB_tag_way1[windex] <= br_pc[19:12];
         end
-        else begin //随机替换
+        /*else begin //随机替换
             if(timer) begin
                 //BTB_way0[windex] <= br_target;
                 BTB_tag_way0[windex] <= br_pc[19:12];
@@ -155,10 +167,58 @@ always @(posedge clk) begin
                 //BTB_way1[windex] <= br_target;
                 BTB_tag_way1[windex] <= br_pc[19:12];
             end
-        end
-        
+        end*/
     end
 end
+
+btb_tag_bram btb_tag_way0(
+    .clka(clk),
+    .ena(1'b1),
+    .wea(BTB_wen & (~BTB_v_0[windex] | (BTB_v_1[windex] & timer))),
+    .addra(windex),
+    .dina(br_pc[19:12]),
+    .clkb(clk),
+    .enb(1'b1),
+    .addrb(rindex),
+    .doutb(tag_way0)
+);
+
+btb_tag_bram btb_tag_way0_sub(
+    .clka(clk),
+    .ena(1'b1),
+    .wea(BTB_wen & (~BTB_v_0[windex] | (BTB_v_1[windex] & timer))),
+    .addra(windex),
+    .dina(br_pc[19:12]),
+    .clkb(clk),
+    .enb(1'b1),
+    .addrb(rindex_2),
+    .doutb(tag2_way0)
+);
+
+btb_tag_bram btb_tag_way1(
+    .clka(clk),
+    .ena(1'b1),
+    .wea(BTB_wen & ((BTB_v_0[windex] & ~BTB_v_1[windex]) | (BTB_v_0[windex] & BTB_v_1[windex] & ~timer))),
+    .addra(windex),
+    .dina(br_pc[19:12]),
+    .clkb(clk),
+    .enb(1'b1),
+    .addrb(rindex),
+    .doutb(tag_way1)
+);
+
+btb_tag_bram btb_tag_way1_sub(
+    .clka(clk),
+    .ena(1'b1),
+    .wea(BTB_wen & ((BTB_v_0[windex] & ~BTB_v_1[windex]) | (BTB_v_0[windex] & BTB_v_1[windex] & ~timer))),
+    .addra(windex),
+    .dina(br_pc[19:12]),
+    .clkb(clk),
+    .enb(1'b1),
+    .addrb(rindex_2),
+    .doutb(tag2_way1)
+);
+
 
 btb_bram btb_way0(
     .clka(clk),
@@ -208,36 +268,41 @@ btb_bram btb_way1_sub(
     .doutb(rdata2_way1)
 );
 
-assign tag_hit   = ((BTB_tag_way0[rindex] == pc[19:12]) && BTB_v_0[rindex]) | ((BTB_tag_way1[rindex] == pc[19:12]) && BTB_v_1[rindex]);
-assign tag_hit_2 = ((BTB_tag_way0[rindex_2] == pc2[19:12]) && BTB_v_0[rindex_2]) | ((BTB_tag_way1[rindex_2] == pc2[19:12]) && BTB_v_1[rindex_2]);
+assign v_way0 = BTB_v_0[rindex];
+assign v2_way0 = BTB_v_0[rindex_2];
+assign v_way1 = BTB_v_1[rindex];
+assign v2_way1 = BTB_v_1[rindex_2];
 
-always @(posedge clk) begin
-    if((BTB_tag_way0[rindex] == pc[19:12]) && BTB_v_0[rindex])
-        r_sel0 <= 1'b1;
-    else 
-        r_sel0 <= 1'b0;
-end
+assign tag_hit   = ((tag_way0 == PC_tag) && v_way0_buf) | ((tag_way1 == PC_tag) && v_way1_buf);
+assign tag_hit_2 = ((tag2_way0 == PC2_tag) && v2_way0_buf) | ((tag2_way1 == PC2_tag) && v2_way1_buf);
 
-always @(posedge clk) begin
-    if((BTB_tag_way0[rindex_2] == pc2[19:12]) && BTB_v_0[rindex_2])
-        r2_sel0 <= 1'b1;
-    else 
-        r2_sel0 <= 1'b0;
-end
+assign r_sel0 = (tag_way0 == PC_tag) && v_way0_buf;
+assign r2_sel0 = (tag2_way0 == PC2_tag) && v2_way0_buf;
 
 assign pred_target = r_sel0 ? rdata_way0 : rdata_way1;
 assign pred_target_2 = r2_sel0 ? rdata2_way0 : rdata2_way1;
 
 always @(posedge clk) begin
     if(rst) begin
-        BTB_hit1 <= 1'b0;
-        BTB_hit2 <= 1'b0;
+        PC_tag <= 8'b0;
+        PC2_tag <= 8'b0;
+        v_way0_buf <= 1'b0;
+        v2_way0_buf <= 1'b0;
+        v_way1_buf <= 1'b0;
+        v2_way1_buf <= 1'b0;
     end 
     else begin
-        BTB_hit1 <= tag_hit;
-        BTB_hit2 <= tag_hit_2;
+        PC_tag <= pc[19:12];
+        PC2_tag <= pc2[19:12];
+        v_way0_buf <= v_way0;
+        v2_way0_buf <= v2_way0;
+        v_way1_buf <= v_way1;
+        v2_way1_buf <= v2_way1;
     end
 end
+
+assign BTB_hit1 = tag_hit;
+assign BTB_hit2 = tag_hit_2;
 
 endmodule
 

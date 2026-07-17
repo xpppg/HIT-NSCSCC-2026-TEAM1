@@ -394,9 +394,9 @@ assign data_addr1_0 = {csr_dmw0[27:25], mem_vaddr[28:0]};
 assign data_addr1_1 = {csr_dmw1[27:25], mem_vaddr[28:0]};
 assign data_addr2 = {s1_ppn_l2, mem_vaddr[11:0]};
 
-assign data_addr_sel0 = (csr_da == 2'b01) && (csr_pg == 2'b00);
-assign data_addr_sel1_0 = (mem_vaddr[31:29] == csr_dmw0[31:29]) && (((csr_plv == 2'h0) && csr_dmw0[0]) || ((csr_plv == 2'h3) && csr_dmw0[3]));
-assign data_addr_sel1_1 = (mem_vaddr[31:29] == csr_dmw1[31:29]) && (((csr_plv == 2'h0) && csr_dmw1[0]) || ((csr_plv == 2'h3) && csr_dmw1[3]));
+assign data_addr_sel0 = csr_da;
+assign data_addr_sel1_0 = (mem_vaddr[31:29] == csr_dmw0[31:29]) && ((~csr_plv[0] && csr_dmw0[0]) || (csr_plv[1] && csr_dmw0[3]));
+assign data_addr_sel1_1 = (mem_vaddr[31:29] == csr_dmw1[31:29]) && ((~csr_plv[0] && csr_dmw1[0]) || (csr_plv[1] && csr_dmw1[3]));
 assign data_addr_sel2 = ~(ex_lsu_en & ~s1_found_l2) & ~(ex_lsu_en & s1_found_l2 & s1_v_l2 & (s1_plv_l2 < csr_plv)) 
                         & ~(ex_lsu_en & inst_is_load & s1_found_l2 & ~s1_v_l2) & ~(ex_lsu_en & inst_is_store & s1_found_l2 & ~s1_v_l2) 
                         & ~(ex_lsu_en & inst_is_store & s1_found_l2 & s1_v_l2 & (s1_plv_l2 >= csr_plv) & ~s1_d_l2);
@@ -405,17 +405,16 @@ assign data_addr_v = data_addr_sel0 | data_addr_sel1_0 | data_addr_sel1_1 | data
 assign data_sram_addr  = data_addr_sel0 ? data_addr0 :
                          data_addr_sel1_0 ? data_addr1_0 :
                          data_addr_sel1_1 ? data_addr1_1 : data_addr2;
-assign data_sram_en   = ex_lsu_en & data_addr_v & EXE_ready_go & MEM_allowin;
+assign data_sram_en   = ex_lsu_en & data_addr_v & ~mmu_wating;
 
-assign dcache_v_0 = (csr_crmd[8:7] == 2'b01); 
-assign dcache_v_1_0 = (csr_dmw0[5:4] == 2'b01);
-assign dcache_v_1_1 = (csr_dmw1[5:4] == 2'b01);
-assign dcache_v_2 = (s1_mat_l2 == 2'b01);
+assign dcache_v_0 = csr_crmd[7]; 
+assign dcache_v_1_0 = csr_dmw0[4];
+assign dcache_v_1_1 = csr_dmw1[4];
+assign dcache_v_2 = s1_mat_l2[0];
 
 assign dcache_v = data_addr_sel0   ? dcache_v_0 :
                   data_addr_sel1_0 ? dcache_v_1_0 :
-                  data_addr_sel1_1 ? dcache_v_1_1 :
-                  data_addr_sel2   ? dcache_v_2 : 1'b0;
+                  data_addr_sel1_1 ? dcache_v_1_1 : dcache_v_2;
 
 
 //TLB异常
