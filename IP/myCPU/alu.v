@@ -221,65 +221,47 @@ module mul(
 wire[31:0] rA = (signed_en & A[31]) ? (0 - A) : A;
 wire[31:0] rB = (signed_en & B[31]) ? (0 - B) : B;
 
-reg[15:0] A00, B00, A10, B10;
-reg[15:0] A01, B01, A11, B11;
+(* use_dsp48 = "yes" *) wire[31:0] mult0_comb = rA[15:0] * rB[15:0];  // A0*B0
+(* use_dsp48 = "yes" *) wire[31:0] mult1_comb = rA[15:0] * rB[31:16];  // A0*B1
+(* use_dsp48 = "yes" *) wire[31:0] mult2_comb = rA[31:16] * rB[15:0];  // A1*B0
+(* use_dsp48 = "yes" *) wire[31:0] mult3_comb = rA[31:16] * rB[31:16];  // A1*B1
+
+
+reg[31:0] A0_B0, A0_B1, A1_B0, A1_B1;
 reg sign;   
 
 always @(posedge clk) begin
     if (reset) begin
-        A00 <= 0; B00 <= 0; A10 <= 0; B10 <= 0;
-        A01 <= 0; B01 <= 0; A11 <= 0; B11 <= 0;
+        A0_B0 <= 0; A0_B1 <= 0; A1_B0 <= 0; A1_B1 <= 0;
         sign <= 0;
     end else if (en) begin   // 仅当使能时更新
-        A00 <= rA[15:0]; A01 <= rA[15:0];
-        B00 <= rB[15:0]; B01 <= rB[15:0];
-        A10 <= rA[31:16]; A11 <= rA[31:16];
-        B10 <= rB[31:16]; B11 <= rB[31:16];
-        sign <= signed_en & (A[31] ^ B[31]);
-    end
-end
-
-(* use_dsp48 = "yes" *) wire[31:0] mult0_comb = A00 * B00;  // A0*B0
-(* use_dsp48 = "yes" *) wire[31:0] mult1_comb = A01 * B10;  // A0*B1
-(* use_dsp48 = "yes" *) wire[31:0] mult2_comb = A10 * B01;  // A1*B0
-(* use_dsp48 = "yes" *) wire[31:0] mult3_comb = A11 * B11;  // A1*B1
-
-
-reg[31:0] A0_B0, A0_B1, A1_B0, A1_B1;
-reg sign1;   
-
-always @(posedge clk) begin
-    if (reset) begin
-        A0_B0 <= 0; A0_B1 <= 0; A1_B0 <= 0; A1_B1 <= 0;
-        sign1 <= 0;
-    end else if (valid_stage0) begin   // 仅当使能时更新
         A0_B0 <= mult0_comb;
         A0_B1 <= mult1_comb;
         A1_B0 <= mult2_comb;
         A1_B1 <= mult3_comb;
-        sign1 <= sign;
+        sign <= signed_en & (A[31] ^ B[31]);
     end
 end
 
 wire[63:0] res = {A1_B1, A0_B0} + {15'b0, {1'b0, A1_B0} + {1'b0, A0_B1}, 16'b0};
-assign result = sign1 ? (0 - res) : res;
+assign result = sign ? (0 - res) : res;
 
 reg valid_stage0, valid_stage1;
 
 always @(posedge clk) begin
     if (reset) begin
         valid_stage0 <= 1'b0;
-        valid_stage1 <= 1'b0;
+        //valid_stage1 <= 1'b0;
     end else begin
         // Stage 0 有效表示当前周期有输入被采样
         valid_stage0 <= en;
         // Stage 1 有效表示 Stage 0 的数据已经流到了 Stage 1
-        valid_stage1 <= valid_stage0;
+        //valid_stage1 <= valid_stage0;
     end
 end
 
 // 当 Stage 1 有效时，组合逻辑输出的 result 已经稳定
-assign result_valid = valid_stage1;
+assign result_valid = valid_stage0;
 
 endmodule
 

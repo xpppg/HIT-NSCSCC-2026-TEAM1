@@ -1244,7 +1244,6 @@ assign data_sram_en = (ex_mem_en & ~ex_mem_wr) | (wb_mem_en & MEM_ready_go & WB_
 assign data_sram_wen = (wb_mem_en & MEM_valid & MEM_ready_go & WB_allowin) ? wb_mem_wen : 4'b0;
 assign data_sram_addr = (wb_mem_en & MEM_valid) ? wb_mem_paddr : ex_mem_paddr;
 assign data_sram_waddr = wb_mem_paddr;
-wire debug000 = (data_sram_addr != data_sram_waddr) && (data_sram_wen != 4'b0);
 assign data_sram_wdata = wb_mem_wdata;//(wb_mem_en & MEM_valid) ? wb_mem_wdata : ex_mem_wdata;
 assign data_sram_rsize = ex_mem_rsize;
 assign dcache_v = (wb_mem_en & MEM_valid) ? wb_dcache_v : ex_dcache_v;
