@@ -13,6 +13,7 @@ module dcache_tag_v5(
     input wire sram_en,
     input wire [3:0] sram_wen,
     input wire [31:0] sram_addr,
+    input wire [31:0] sram_waddr,
     // input wire [31:0] sram_wdata,
     // output wire [31:0] sram_rdata,
     // axi
@@ -25,19 +26,26 @@ module dcache_tag_v5(
 
     // cache_data
     output wire [`HIT_WIDTH-1:0] hit,
+    output wire [`HIT_WIDTH-1:0] hit1,
     output wire lru
 );
     reg [`TAG_WIDTH-1:0] tag_way0 [`INDEX_WIDTH-1:0]; // v + tag 
     reg [`TAG_WIDTH-1:0] tag_way1 [`INDEX_WIDTH-1:0];
     reg [`INDEX_WIDTH-1:0] lru_r;
     wire [`TAG_WIDTH-2:0] tag;
+    wire [`TAG_WIDTH-2:0] tag1;
     wire [5:0] index;
+    wire [5:0] index1;
     wire [5:0] offset;
+    wire [5:0] offset1;
+
     wire cached_v;
     // wire [`TAG_WIDTH-1:0] tag_ram_out;
 
     wire hit_way0;
     wire hit_way1;
+    wire hit_way0_simple;
+    wire hit_way1_simple;
     wire [31:0] axi_waddr_way0;
     wire [31:0] axi_waddr_way1;
     wire write_back_way0;
@@ -50,6 +58,12 @@ module dcache_tag_v5(
         index,
         offset
     } = sram_addr;
+
+    assign {
+        tag1,
+        index1,
+        offset1
+    } = sram_waddr;
 
     // tag_dist_ram u_tag_ram(
     //     .clk(clk),
@@ -224,6 +238,12 @@ module dcache_tag_v5(
     // assign hit = cached_v & sram_en & ({1'b1,tag} == tag_ram_out);
     assign lru = lru_r[index];
     assign hit = {
+        hit_way1_simple,
+        hit_way0_simple
+    };
+    assign hit_way0_simple = {1'b1,tag1} == tag_way0[index1];
+    assign hit_way1_simple = {1'b1,tag1} == tag_way1[index1];
+    assign hit1 = {
         hit_way1,
         hit_way0
     };

@@ -97,6 +97,7 @@ module core_top(
     wire data_sram_en;
     wire [3:0] data_sram_wen;
     wire [31:0] data_sram_addr;
+    wire [31:0] data_sram_waddr;
     wire [2:0] data_sram_rsize; 
     wire [31:0] data_sram_wdata;
     wire [31:0] data_sram_rdata;
@@ -164,6 +165,7 @@ module core_top(
     wire [3:0] data_sram_wen_out;
     wire [2:0] data_sram_rsize_out;
     wire [31:0] data_sram_addr_out;
+    wire [31:0] data_sram_waddr_out;
     wire [31:0] data_sram_wdata_out;
 
     wire data_cached_v_out;  
@@ -175,6 +177,7 @@ module core_top(
     reg [3:0] data_sram_wen_buf;
     reg [2:0] data_sram_rsize_buf;
     reg [31:0] data_sram_addr_buf;
+    reg [31:0] data_sram_waddr_buf;
     reg [31:0] data_sram_wdata_buf;
     reg inst_cached_v_buf;
     reg data_cached_v_buf;
@@ -205,6 +208,7 @@ module core_top(
             data_sram_wen_buf <= 4'b0;
             data_sram_rsize_buf <= 3'b0;
             data_sram_addr_buf <= 32'b0;
+            data_sram_waddr_buf <= 32'b0;
             data_sram_wdata_buf <= 32'b0;
 
             data_cached_v_buf <= 1'b0;
@@ -215,6 +219,7 @@ module core_top(
             data_sram_wen_buf <= data_sram_wen_out;
             data_sram_rsize_buf <= data_sram_rsize_out;
             data_sram_addr_buf <= data_sram_addr_out;
+            data_sram_waddr_buf <= data_sram_waddr_out;
             data_sram_wdata_buf <= data_sram_wdata_out;
 
             data_cached_v_buf <= data_cached_v_out;
@@ -239,6 +244,7 @@ module core_top(
     assign data_sram_wen = cpu_stall_buf ? data_sram_wen_buf : data_sram_wen_out;
     assign data_sram_rsize = cpu_stall_buf ? data_sram_rsize_buf : data_sram_rsize_out;
     assign data_sram_addr = cpu_stall_buf ? data_sram_addr_buf : data_sram_addr_out;
+    assign data_sram_waddr = cpu_stall_buf ? data_sram_waddr_buf : data_sram_waddr_out;
     assign data_sram_wdata = cpu_stall_buf ? data_sram_wdata_buf : data_sram_wdata_out;
 
     assign data_cached_v = cpu_stall_buf ? data_cached_v_buf : data_cached_v_out;
@@ -258,6 +264,7 @@ module core_top(
         .data_sram_wen          (data_sram_wen_out     ),
         .data_sram_rsize        (data_sram_rsize_out   ),
         .data_sram_addr         (data_sram_addr_out    ),
+        .data_sram_waddr        (data_sram_waddr_out   ),
         .data_sram_wdata        (data_sram_wdata_out   ),
         .data_sram_rdata        (data_sram_rdata       ),
         .dcache_v               (data_cached_v_out     ),
@@ -323,6 +330,7 @@ module core_top(
         .sram_en       (data_sram_en       ),
         .sram_wen      (data_sram_wen      ),
         .sram_addr     (data_sram_addr     ),
+        .sram_waddr    (data_sram_waddr    ),
         .sram_wdata    (data_sram_wdata    ),
         .refresh       (dcache_refresh       ),
         .cached        (data_cached_v        ),

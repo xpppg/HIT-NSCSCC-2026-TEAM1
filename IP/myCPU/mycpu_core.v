@@ -11,7 +11,7 @@ module mycpu_core(
     output wire        data_sram_en,
     output wire [ 3:0] data_sram_wen,
     output wire [31:0] data_sram_addr,
-    output wire [31:0] data_sram_vaddr,
+    output wire [31:0] data_sram_waddr,
     output wire [ 2:0] data_sram_rsize,
     output wire [31:0] data_sram_wdata,
     input  wire [31:0] data_sram_rdata,
@@ -237,7 +237,7 @@ assign IF2_ready_go = ~fetch_stall;
 
 assign ID_ready_go =  ~cpu_stall & ~peu_wating3;
 assign IS_ready_go =  ~cpu_stall & ~rf_we_wating & ~peu_wating;
-assign EXE_ready_go = ~div_wating & ~sub_div_wating & ~cpu_stall & ~mmu_wating;
+assign EXE_ready_go = ~div_wating & ~sub_div_wating & ~cpu_stall & ~mmu_wating & ~wr_buf_wating;
 assign MEM_ready_go = ~cpu_stall;
 assign WB_ready_go  = 1'b1;
 
@@ -851,11 +851,14 @@ reg [34:0] ex_pred_info;
 
 wire        ex_mmu_en;
 wire [31:0] ex_mem_vaddr;
+wire [31:0] ex_mem_paddr;
+wire        ex_mem_en;
 wire        ex_mem_wr;
 wire [ 2:0] ex_mem_rsize;
 wire [ 3:0] ex_mem_wen;
 wire [31:0] ex_mem_wdata;
 wire [ 4:0] ex_ld_sel;
+wire        ex_dcache_v;
 
 wire [31:0] ex_alu_result;
 wire [31:0] ex_alu_result_2;
@@ -1055,9 +1058,6 @@ lsu u_lsu(
 `endif
     );
 
-assign data_sram_wen = ex_mem_wen;
-assign data_sram_wdata = ex_mem_wdata;
-assign data_sram_rsize = ex_mem_rsize;
 
 peu u_peu(
     .en(ex_ctrl_en[3] & EXE_valid & ~cpu_stall & MEM_allowin & ~flush & ~ex_ex_info_buf[0] & ~wb_br_taken),
@@ -1117,6 +1117,12 @@ reg [ 1:0] wb_br_pht;
 reg        wb_actual_taken;
 reg [31:0] wb_actual_target;
 
+reg  [31:0] wb_mem_paddr;
+reg         wb_mem_en;
+reg  [ 3:0] wb_mem_wen;
+reg  [31:0] wb_mem_wdata;
+reg         wb_dcache_v;
+
 // MEM阶段流水线缓存
 always @(posedge clk) begin
     if(reset | wb_ex | ertn_flush | br_taken) 
@@ -1125,6 +1131,8 @@ always @(posedge clk) begin
         sub_MEM_valid             <= 1'b0;
         wb_ex_info                <= 16'b0;
         wb_is_tlbr0               <= 1'b0;
+        wb_mem_en                 <= 1'b0;
+        wb_mem_paddr              <= 32'b0;
     end
     else if(EXE_ready_go & MEM_allowin)
     begin
@@ -1167,14 +1175,20 @@ always @(posedge clk) begin
         wb_br_pht                 <= ex_br_pht;
         wb_actual_taken           <= ex_actual_taken;
         wb_actual_target          <= ex_actual_target;
+
+        wb_mem_en                 <= ex_mem_en & ex_mem_wr;
+        wb_mem_wen                <= ex_mem_wen;
+        wb_mem_wdata              <= ex_mem_wdata;
+        wb_mem_paddr              <= ex_mem_paddr;
+        wb_dcache_v               <= ex_dcache_v;
         `ifdef DIFFTEST_EN
         wb_is_CNTinst             <= ex_is_CNTinst;
         wb_csr_rstat              <= ex_csr_rstat && (ex_csr_num == 15'h0005);
         wb_timer_64               <= ex_timer_64;
-        wb_inst_ld_en             <= ex_inst_ld_en & {8{data_sram_en}};
-        wb_inst_st_en             <= ex_inst_st_en & {8{data_sram_en}};
+        wb_inst_ld_en             <= ex_inst_ld_en & {8{ex_mem_en}};
+        wb_inst_st_en             <= ex_inst_st_en & {8{ex_mem_en}};
         wb_lsu_vaddr              <= ex_mem_vaddr;
-        wb_lsu_paddr              <= data_sram_addr;
+        wb_lsu_paddr              <= ex_mem_paddr;
         wb_st_data                <= ex_st_data;
         `endif  
     end
@@ -1220,6 +1234,19 @@ assign br_target = wb_br_target;
 assign br_pht = wb_br_pht;
 assign actual_taken = wb_actual_taken & MEM_ready_go & WB_allowin & MEM_valid & ~wb_ex & ~wb_ertn;
 assign actual_target = wb_actual_target;
+
+//data
+assign data_sram_en = (ex_mem_en & ~ex_mem_wr) | (wb_mem_en & MEM_ready_go & WB_allowin & MEM_valid);
+assign data_sram_wen = (wb_mem_en & MEM_valid & MEM_ready_go & WB_allowin) ? wb_mem_wen : 4'b0;
+assign data_sram_addr = (wb_mem_en & MEM_valid) ? wb_mem_paddr : ex_mem_paddr;
+assign data_sram_waddr = wb_mem_paddr;
+wire debug000 = (data_sram_addr != data_sram_waddr) && (data_sram_wen != 4'b0);
+assign data_sram_wdata = wb_mem_wdata;//(wb_mem_en & MEM_valid) ? wb_mem_wdata : ex_mem_wdata;
+assign data_sram_rsize = ex_mem_rsize;
+assign dcache_v = (wb_mem_en & MEM_valid) ? wb_dcache_v : ex_dcache_v;
+
+wire wr_buf_wating;
+assign wr_buf_wating = wb_mem_en & MEM_valid & ex_ctrl_en[2] & EXE_valid & ~ex_mem_wr;
 
 CSR0 u_CSR0(
     .clk        (clk             ),
@@ -1329,8 +1356,8 @@ assign tlb_remake = 1'b0;
         .inst_is_store    (ex_mem_wr         ),
         .ex_lsu_en        (ex_mmu_en         ),
         .mmu_wating       (mmu_wating        ),
-        .data_sram_en     (data_sram_en      ),
-        .data_sram_addr   (data_sram_addr    ),
+        .data_sram_en     (ex_mem_en         ),
+        .data_sram_addr   (ex_mem_paddr      ),
 
         .peu2tlb_en       (ex_peu2tlb_en     ),
         .rj_value         (ex_rj_value       ),
@@ -1339,7 +1366,7 @@ assign tlb_remake = 1'b0;
         .tlbsrch_wvalue   (ex_tlbsrch_wdata  ),
         .tlb2csr_wvalue   (ex_tlb2csr_wvalue ),
 
-        .dcache_v         (dcache_v          ),
+        .dcache_v         (ex_dcache_v       ),
  
         .wb_tlbr0         (wb_tlbr0          ),
         .wb_ppi0          (wb_ppi0           ),
@@ -1352,7 +1379,6 @@ assign tlb_remake = 1'b0;
 `endif
     );
     
-    assign data_sram_vaddr = ex_mem_vaddr;
 
 //异常处理
 //IF级wb_ex判断

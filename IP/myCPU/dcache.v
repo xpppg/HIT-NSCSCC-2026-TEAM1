@@ -11,6 +11,7 @@ module dcache
     input wire         sram_en,
     input wire  [ 3:0] sram_wen,
     input wire  [31:0] sram_addr,
+    input wire  [31:0] sram_waddr,
     input wire  [31:0] sram_wdata,
     input wire         refresh,
     input wire         cached,
@@ -26,6 +27,7 @@ module dcache
 );
 
     wire [HIT_WD       -1:0] hit;
+    wire [HIT_WD       -1:0] hit1;
     wire [LRU_WD       -1:0] lru;
     
     dcache_tag_v5 u_dcache_tag(
@@ -37,12 +39,14 @@ module dcache
         .sram_en    (sram_en         ),
         .sram_wen   (sram_wen        ),
         .sram_addr  (sram_addr       ),
+        .sram_waddr (sram_waddr      ),
         .refresh    (refresh         ),
         .miss       (miss            ),
         .axi_raddr  (raddr           ),
         .write_back (write_back      ),
         .axi_waddr  (waddr           ),
         .hit        (hit             ),
+        .hit1       (hit1            ),
         .lru        (lru             )
     );
 
@@ -51,6 +55,7 @@ module dcache
         .rst           (rst          ),
         .write_back    (write_back   ),
         .hit           (hit          ),
+        .hit1          (hit1         ),
         .lru           (lru          ),
         .cached        (cached       ),
         .sram_en       (sram_en      ),
