@@ -175,6 +175,8 @@ wire EXE_ready_go_2;
 wire MEM_ready_go_2;
 wire WB_ready_go;
 wire div_wating;
+wire mul_wating;
+wire sub_mul_wating;
 wire mmu_wating;
 wire pred_wating;
 wire fetch_wating;
@@ -237,7 +239,7 @@ assign IF2_ready_go = ~fetch_stall;
 
 assign ID_ready_go =  ~cpu_stall & ~peu_wating3;
 assign IS_ready_go =  ~cpu_stall & ~rf_we_wating & ~peu_wating;
-assign EXE_ready_go = ~div_wating & ~sub_div_wating & ~cpu_stall & ~mmu_wating & ~wr_buf_wating;
+assign EXE_ready_go = ~div_wating & ~sub_div_wating & ~cpu_stall & ~mmu_wating & ~wr_buf_wating & ~mul_wating & ~sub_mul_wating;
 assign MEM_ready_go = ~cpu_stall;
 assign WB_ready_go  = 1'b1;
 
@@ -994,6 +996,7 @@ alu u_alu1(
     .alu_src2   (ex_alu_src2       ),
     .alu_result (ex_alu_result     ),
     .div_wating (div_wating        ),
+    .mul_wating (mul_wating        ),
     .EXE_valid  (EXE_valid         ),
     .forward_ok (EXE_forward_ok    ),
     .forward_result (EXE_forward_result)
@@ -1007,6 +1010,7 @@ alu u_alu2(
     .alu_src2   (ex_alu_src4       ),
     .alu_result (ex_alu_result_2   ),
     .div_wating (sub_div_wating    ),
+    .mul_wating (sub_mul_wating    ),
     .EXE_valid  (sub_EXE_valid     ),
     .forward_ok (EXE_forward_ok_2  ),
     .forward_result (EXE_forward_result_2)

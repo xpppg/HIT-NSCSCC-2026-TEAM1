@@ -6,6 +6,7 @@ module alu(
   input  wire [31:0] alu_src2,
   output wire [31:0] alu_result,
   output wire div_wating,
+  output wire mul_wating,
   output wire forward_ok,
   output wire [31:0] forward_result,
   input  wire EXE_valid
@@ -78,13 +79,38 @@ assign adder_cin = (op_sub | op_slt | op_sltu) ? 1'b1      : 1'b0;
 assign {adder_cout, adder_result} = adder_a + adder_b + adder_cin;
 
 //乘法器
-wire [32:0] mul1;
-wire [32:0] mul2;
-wire [65:0] mul_total;
+wire mul;
+reg  mul_in_done;
+wire mul_complete;
+wire [63:0] mul_total;
 wire [31:0] mul_result;
-assign mul1 = {{op_mulh_w & alu_src1[31]}, alu_src1[31:0]};
-assign mul2 = {{op_mulh_w & alu_src2[31]}, alu_src2[31:0]};
-assign mul_total = $signed(mul1) * $signed(mul2);
+
+assign mul = (op_mul | op_mulh_w | op_mulh_wu) & ~mul_in_done & EXE_valid;
+assign mul_wating = (op_mul | op_mulh_w | op_mulh_wu) & ~mul_complete & EXE_valid;
+
+always @(posedge clk) begin
+  if(mul) begin
+    mul_in_done <= 1'b1;
+  end
+  else if (mul_wating) begin
+    mul_in_done <= mul_in_done;
+  end
+  else begin
+    mul_in_done <= 1'b0;
+  end
+end
+
+mul u_mul(
+    .clk(clk),
+    .reset(reset),
+    .en(mul),
+    .A(alu_src1),
+    .B(alu_src2),
+    .signed_en(op_mulh_w),
+    .result(mul_total),
+    .result_valid(mul_complete)
+);
+
 assign mul_result = (op_mulh_w|op_mulh_wu) ? mul_total[63:32] : mul_total[31:0];
 
 //除法器
@@ -181,11 +207,92 @@ assign forward_result = ({32{op_add|op_sub}} & add_sub_result)
 endmodule
 
 
-module simple_alu(
+module mul(
+    input           clk,
+    input           reset,          
+    input           en,             
+    input[31:0]     A,
+    input[31:0]     B,
+    input           signed_en,
+    output[63:0]    result,
+    output          result_valid    
+);
+
+wire[31:0] rA = (signed_en & A[31]) ? (0 - A) : A;
+wire[31:0] rB = (signed_en & B[31]) ? (0 - B) : B;
+
+reg[15:0] A00, B00, A10, B10;
+reg[15:0] A01, B01, A11, B11;
+reg sign;   
+
+always @(posedge clk) begin
+    if (reset) begin
+        A00 <= 0; B00 <= 0; A10 <= 0; B10 <= 0;
+        A01 <= 0; B01 <= 0; A11 <= 0; B11 <= 0;
+        sign <= 0;
+    end else if (en) begin   // 仅当使能时更新
+        A00 <= rA[15:0]; A01 <= rA[15:0];
+        B00 <= rB[15:0]; B01 <= rB[15:0];
+        A10 <= rA[31:16]; A11 <= rA[31:16];
+        B10 <= rB[31:16]; B11 <= rB[31:16];
+        sign <= signed_en & (A[31] ^ B[31]);
+    end
+end
+
+(* use_dsp48 = "yes" *) wire[31:0] mult0_comb = A00 * B00;  // A0*B0
+(* use_dsp48 = "yes" *) wire[31:0] mult1_comb = A01 * B10;  // A0*B1
+(* use_dsp48 = "yes" *) wire[31:0] mult2_comb = A10 * B01;  // A1*B0
+(* use_dsp48 = "yes" *) wire[31:0] mult3_comb = A11 * B11;  // A1*B1
+
+
+reg[31:0] A0_B0, A0_B1, A1_B0, A1_B1;
+reg sign1;   
+
+always @(posedge clk) begin
+    if (reset) begin
+        A0_B0 <= 0; A0_B1 <= 0; A1_B0 <= 0; A1_B1 <= 0;
+        sign1 <= 0;
+    end else if (valid_stage0) begin   // 仅当使能时更新
+        A0_B0 <= mult0_comb;
+        A0_B1 <= mult1_comb;
+        A1_B0 <= mult2_comb;
+        A1_B1 <= mult3_comb;
+        sign1 <= sign;
+    end
+end
+
+wire[63:0] res = {A1_B1, A0_B0} + {15'b0, {1'b0, A1_B0} + {1'b0, A0_B1}, 16'b0};
+assign result = sign1 ? (0 - res) : res;
+
+reg valid_stage0, valid_stage1;
+
+always @(posedge clk) begin
+    if (reset) begin
+        valid_stage0 <= 1'b0;
+        valid_stage1 <= 1'b0;
+    end else begin
+        // Stage 0 有效表示当前周期有输入被采样
+        valid_stage0 <= en;
+        // Stage 1 有效表示 Stage 0 的数据已经流到了 Stage 1
+        valid_stage1 <= valid_stage0;
+    end
+end
+
+// 当 Stage 1 有效时，组合逻辑输出的 result 已经稳定
+assign result_valid = valid_stage1;
+
+endmodule
+
+module salu(
+  input  clk,
+  input  reset,
   input  wire [18:0] alu_op,
   input  wire [31:0] alu_src1,
   input  wire [31:0] alu_src2,
-  output wire [31:0] alu_result
+  output wire [31:0] alu_result,
+  output wire forward_ok,
+  output wire [31:0] forward_result,
+  input  wire EXE_valid
 );
 
 wire op_add;   //add operation
@@ -278,5 +385,18 @@ assign alu_result = ({32{op_add|op_sub}} & add_sub_result)
                   | ({32{op_lui       }} & lui_result)
                   | ({32{op_sll       }} & sll_result)
                   | ({32{op_srl|op_sra}} & sr_result);
+
+assign forward_ok = alu_op[0] | alu_op[1] | alu_op[2] | alu_op[3] | alu_op[4] | alu_op[5] | alu_op[6] | alu_op[7]
+                  | alu_op[8] | alu_op[9] | alu_op[10] | alu_op[11];
+assign forward_result = ({32{op_add|op_sub}} & add_sub_result)
+                      | ({32{op_slt       }} & slt_result)
+                      | ({32{op_sltu      }} & sltu_result)
+                      | ({32{op_and       }} & and_result)
+                      | ({32{op_nor       }} & nor_result)
+                      | ({32{op_or        }} & or_result)
+                      | ({32{op_xor       }} & xor_result)
+                      | ({32{op_lui       }} & lui_result)
+                      | ({32{op_sll       }} & sll_result)
+                      | ({32{op_srl|op_sra}} & sr_result);
 
 endmodule
