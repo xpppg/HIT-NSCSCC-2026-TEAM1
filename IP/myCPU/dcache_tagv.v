@@ -231,10 +231,24 @@ module dcache_tagv(
     assign hit_way1 = cached_v & cpu_en & ({1'b1,tag} == tag_way1[index]);
     assign miss = cached_v & cpu_en & ~(hit_way0|hit_way1);
     // assign axi_raddr = cached_v ? {cpu_addr[31:6],6'b0} : cpu_addr;
-    assign axi_wen = lru ? axi_wen_way1 : axi_wen_way0;
-    assign axi_wen_way0 = miss & tag_way0[index][20];
-    assign axi_wen_way1 = miss & tag_way1[index][20];
-    assign axi_waddr = lru_r[index] ? axi_waddr_way1 : axi_waddr_way0;
+    reg lru_reg;
+    reg miss_r;
+    reg tag0_r;
+    reg tag1_r;
+    reg [31:0] waddr_r0;
+    reg [31:0] waddr_r1;
+    always @(posedge clk) begin
+        lru_reg <= lru;
+        miss_r <= miss;
+        tag0_r <= tag_way0[index][20];
+        tag1_r <= tag_way1[index][20];
+        waddr_r0 <= axi_waddr_way0;
+        waddr_r1 <= axi_waddr_way1;
+    end
+    assign axi_wen = lru_reg ? axi_wen_way1 : axi_wen_way0;
+    assign axi_wen_way0 = miss_r & tag0_r;
+    assign axi_wen_way1 = miss_r & tag1_r;
+    assign axi_waddr = lru_reg ? waddr_r1 : waddr_r0;
     assign axi_waddr_way0 = {
         tag_way0[index][19:0],
         index,

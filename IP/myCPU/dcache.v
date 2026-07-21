@@ -85,11 +85,11 @@ always @(posedge clk) begin
     else begin
         case(wstage)
             IDLE: begin
-                if(stage == SEND & axi_wen) begin
+                if(stage[2] & axi_wen) begin
                     wstage <= SEND;
                     awaddr <= axi_waddr;
                     awcacheline <= cacheline_old;
-                end else if(stage == SEND & ~axi_wen) begin
+                end else if(stage[2] & ~axi_wen) begin
                     wstage <= DONE;
                 end
             end
@@ -101,7 +101,7 @@ always @(posedge clk) begin
                 wstage <= DONE;
             end
             DONE: begin
-                if(stage == DONE) 
+                if(stage[0]) 
                     wstage <= IDLE;
             end
             default: wstage <= IDLE;
@@ -110,11 +110,11 @@ always @(posedge clk) begin
 end
 
 assign araddr = axi_raddr;
-assign arvalid = (stage == SEND);
+assign arvalid = stage[2];//stage == SEND;
 
-assign rready = (stage == REC);
+assign rready = stage[1];//stage == REC;
 
-assign awvalid = (wstage == SEND);
+assign awvalid = wstage[2];//wstage == SEND;
     
     dcache_tagv u_dcache_tagv(
     	.clk        (clk             ),

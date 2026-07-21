@@ -342,7 +342,7 @@ pre_IF u_pre_IF(
     .pred_target(pred_target)
 );
 
-assign BPU_rst = reset | tlb_remake | wb_ex | ertn_flush;
+assign BPU_rst = reset | wb_ex | ertn_flush;
 
 BPU u_BPU(
     .clk           (clk),
@@ -363,8 +363,8 @@ BPU u_BPU(
     .br_pc         (pc_buf_MEM),
     .br_target     (actual_target),
     .br_pht        (br_pht),
-    .inst_br       (inst_br),
-    .actual_taken  (actual_taken)
+    .inst_br       (wb_inst_br & MEM_valid),
+    .actual_taken  (wb_actual_taken & MEM_valid)
 );
 
 IF u_IF(
@@ -1218,18 +1218,18 @@ assign rf_we_turning = wb_turning;
 
 
 //CSR
-assign wb_ex = wb_ex_info[0] & MEM_ready_go & MEM_valid;//wb_ex_info[0] & MEM_ready_go & WB_allowin & MEM_valid;/
+assign wb_ex = wb_ex_info[0] & MEM_valid;//wb_ex_info[0] & MEM_ready_go & WB_allowin & MEM_valid;/
 assign wb_pc = pc_buf_MEM;
 assign wb_ecode = wb_ex_info[6:1];
 assign wb_esubcode = wb_ex_info[15:7];
 assign wb_vaddr = ((wb_ecode == 6'h08 && ~wb_esubcode[0]) | wb_is_tlbr0) ? pc_buf_MEM : wb_alu_result;
 
 assign csr_wnum = wb_csr_num;
-assign csr_we = wb_csr_wen[0] & ~wb_ex & MEM_ready_go & WB_allowin & MEM_valid ;
-assign csr_we2 = wb_csr_wen[1] & ~wb_ex & MEM_ready_go & WB_allowin & MEM_valid ;
+assign csr_we = wb_csr_wen[0] & ~wb_ex & WB_allowin & MEM_valid ;
+assign csr_we2 = wb_csr_wen[1] & ~wb_ex & WB_allowin & MEM_valid ;
 assign csr_wmask = wb_csr_wmask;
 assign csr_wvalue = wb_csr_wvalue;
-assign ertn_flush = wb_ertn & ~wb_ex & MEM_ready_go & WB_allowin & MEM_valid;
+assign ertn_flush = wb_ertn & ~wb_ex & MEM_valid;
 
 //跳转
 assign inst_br = wb_inst_br & MEM_ready_go & WB_allowin & MEM_valid & ~wb_ex & ~wb_ertn;
@@ -1461,11 +1461,11 @@ wire sel_sub_pipe = (MEM_valid & sub_MEM_valid) ? rf_we_turning : ~MEM_valid;
 `ifdef DIFFTEST_EN
 
 always @(posedge clk) begin
-    if (reset | !MEM_ready_go) begin
+    if (reset) begin
         {cmt_valid, cmt_cnt_inst, cmt_timer_64, cmt_inst_ld_en, cmt_ld_paddr, cmt_ld_vaddr, cmt_inst_st_en, cmt_st_paddr, cmt_st_vaddr, cmt_st_data, cmt_csr_rstat_en, cmt_csr_data} <= 0;
         {cmt_wen, cmt_wdest, cmt_wdata, cmt_pc, cmt_inst, cmt_ex_pc, cmt_ex_inst} <= 0;
         {cmt_valid2, cmt_wen2, cmt_wdest2, cmt_wdata2, cmt_pc2, cmt_inst2} <= 0;
-    end else if(MEM_ready_go) begin
+    end else if(MEM_ready_go | wb_ex | ertn_flush) begin
         cmt_valid       <= wb_ex ? rf_we_turning ? sub_MEM_valid : 1'b0 : (MEM_valid | sub_MEM_valid);
         cmt_pc          <= sel_sub_pipe ? pc_buf_MEM_2 : pc_buf_MEM;
         cmt_inst        <= sel_sub_pipe ? MEM_inst2 : MEM_inst;
@@ -1503,6 +1503,10 @@ always @(posedge clk) begin
         cmt_ex_pc       <= pc_buf_MEM;
         cmt_ex_inst     <= MEM_inst;
 
+    end else begin
+        {cmt_valid, cmt_cnt_inst, cmt_timer_64, cmt_inst_ld_en, cmt_ld_paddr, cmt_ld_vaddr, cmt_inst_st_en, cmt_st_paddr, cmt_st_vaddr, cmt_st_data, cmt_csr_rstat_en, cmt_csr_data} <= 0;
+        {cmt_wen, cmt_wdest, cmt_wdata, cmt_pc, cmt_inst, cmt_ex_pc, cmt_ex_inst} <= 0;
+        {cmt_valid2, cmt_wen2, cmt_wdest2, cmt_wdata2, cmt_pc2, cmt_inst2} <= 0;
     end
 end
 
