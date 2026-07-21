@@ -335,7 +335,7 @@ module core_top(
         .cpu_rdata     (dcache_temp_rdata    ),
         .cpu_stall     (stallreq_dcache      ),
 
-        .arready       (dcache_arready       ),
+        .arready       (dcache_arready | dbuffer_hit),
         .arvalid       (dcache_arvalid       ),
         .araddr        (dcache_raddr         ),
         
@@ -349,13 +349,13 @@ module core_top(
         .awcacheline   (dcache_cacheline_old )
     );
     
-    //assign dcache_rvalid = dcache_rvalid_axi | dcache_rvalid_buffer;
-    //assign dcache_cacheline_new = dcache_rvalid_axi ? dcache_cacheline_new_axi : dcache_cacheline_new_buffer;
+    assign dcache_rvalid = dcache_rvalid_axi | dcache_rvalid_buffer;
+    assign dcache_cacheline_new = dcache_rvalid_axi ? dcache_cacheline_new_axi : dcache_cacheline_new_buffer;
     
-    assign dcache_rvalid = dcache_rvalid_axi;
-    assign dcache_cacheline_new = dcache_cacheline_new_axi;
+    //assign dcache_rvalid = dcache_rvalid_axi;
+    //assign dcache_cacheline_new = dcache_cacheline_new_axi;
 
-    /*dbuffer u_dbuffer(
+    dbuffer u_dbuffer(
         .clk           (clk           ),
         .rst           (rst           ),
 
@@ -373,12 +373,12 @@ module core_top(
         .axi_aw_free   (axi_aw_free),
         .buffer_refresh(dbuffer_refresh),
         .buffer_cacheline_new (dbuffer_cacheline_new)
-    );*/
+    );
 
-    assign dbuffer_hit = 1'b0;
-    assign dcache_rvalid_buffer = 1'b0;
-    assign dbuffer_ren = 1'b0;
-    assign dbuffer_raddr = 32'b0;
+    //assign dbuffer_hit = 1'b0;
+    //assign dcache_rvalid_buffer = 1'b0;
+    //assign dbuffer_ren = 1'b0;
+    //assign dbuffer_raddr = 32'b0;
 
     reg data_cached_r;
     always @ (posedge clk) begin

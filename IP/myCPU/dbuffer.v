@@ -44,8 +44,8 @@ parameter IDLE = 2'b10,
 	      WAIT = 2'b01;
 
 
-assign buffer_hit1 = ((buffer_tag == cache_raddr[31:6]) && buffer_v && (pre_stage == IDLE) && ~flush1) | cache_refresh1;
-assign buffer_hit2 = ((buffer_tag2 == cache_raddr[31:6]) && buffer_v2 && (pre_stage == IDLE) && ~flush2) | cache_refresh2;
+assign buffer_hit1 = ((buffer_tag == cache_raddr[31:6]) && buffer_v && pre_stage[1]);
+assign buffer_hit2 = ((buffer_tag2 == cache_raddr[31:6]) && buffer_v2 && pre_stage[1]);
 assign buffer_hit = buffer_hit1 | buffer_hit2;
 
 assign flush1 = cache_wen && (cache_waddr[31:6] == buffer_tag);
@@ -58,7 +58,7 @@ always @(posedge clk) begin
         raddr_wait <= 1'b0;
     end 
     else begin
-        if(cache_ren & ~raddr_wait & (pre_stage == IDLE)) begin
+        if(cache_ren & ~raddr_wait & pre_stage[1]) begin
             raddr_old <= cache_raddr;
             raddr_old2 <= raddr_old;
             raddr_wait <= 1'b1;
@@ -74,15 +74,14 @@ always @(posedge clk) begin
         cache_refresh <= 1'b0;
         cache_refresh1 <= 1'b0;
         cache_refresh2 <= 1'b0;
-        buffer_cacheline_old <= 512'b0;
     end 
     else begin
-        if(cache_ren && buffer_hit1 && ~cache_refresh && axi_aw_free) begin
+        if(cache_ren && buffer_hit1 && ~cache_refresh) begin
             cache_refresh <= 1'b1;
             cache_refresh1 <= 1'b1;
             buffer_cacheline_old <= buffer_way;
         end 
-        else if(cache_ren && buffer_hit2 && ~cache_refresh && axi_aw_free) begin
+        else if(cache_ren && buffer_hit2 && ~cache_refresh) begin
             cache_refresh <= 1'b1;
             cache_refresh2 <= 1'b1;
             buffer_cacheline_old <= buffer_way2;
@@ -91,7 +90,6 @@ always @(posedge clk) begin
             cache_refresh <= 1'b0;
             cache_refresh1 <= 1'b0;
             cache_refresh2 <= 1'b0;
-            buffer_cacheline_old <= buffer_way;
         end
     end
 end
@@ -120,11 +118,6 @@ always @(posedge clk) begin
     if(rst) begin
         pre_stage <= IDLE;
         buffer_ren <= 1'b0;
-        buffer_raddr <= 32'b0;
-        buffer_tag <= 26'b0;
-        buffer_way <= 512'b0;
-        buffer_tag2 <= 26'b0;
-        buffer_way2 <= 512'b0;
     end 
     else begin
         case(pre_stage)
@@ -155,9 +148,9 @@ always @(posedge clk) begin
 end
 
 
-wire debug1;
-wire debug2;
-assign debug1 = (cache_raddr == raddr_old + 32'd64) && cache_ren && (pre_stage == IDLE);
-assign debug2 = (cache_raddr == raddr_old2 + 32'd64) && cache_ren && (pre_stage == IDLE);
+//wire debug1;
+//wire debug2;
+//assign debug1 = (cache_raddr == raddr_old + 32'd64) && cache_ren && (pre_stage == IDLE);
+//assign debug2 = (cache_raddr == raddr_old2 + 32'd64) && cache_ren && (pre_stage == IDLE);
 
 endmodule
