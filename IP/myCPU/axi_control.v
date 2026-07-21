@@ -12,11 +12,13 @@ module axi_control(
 
     // dcache 
     input  wire dcache_ren, 
+    output wire dcache_arready,
     input  wire [31:0] dcache_raddr, 
     output wire [511:0] dcache_cacheline_new,
     
     input  wire dcache_wen, 
-    input  wire [31:0] dcache_waddr, 
+    output wire dcache_awready,
+    input  wire [31:0] dcache_awaddr, 
     input  wire [511:0] dcache_cacheline_old, 
 
     input  wire dbuffer_hit,
@@ -99,14 +101,14 @@ assign awlock = 2'b00;
 assign awcache = 4'b0000;
 assign awprot = 3'b000;
 
-reg [6:0] arstate;//ar通道状态机
-parameter AR_START = 7'b1000000,
-	      AR_uncache = 7'b0100000,//uncache read
-		  AR_dcache = 7'b0010000,//dcache read
-          AR_icache = 7'b0001000,//icache read
-          AR_dbuffer = 7'b0000100,//dbuffer read
-          AR_WAIT = 7'b0000010,
-          AR_DONE = 7'b0000001;
+reg [5:0] arstate;//ar通道状态机
+parameter AR_START = 6'b100000,
+	      AR_uncache = 6'b010000,//uncache read
+		  AR_dcache = 6'b001000,//dcache read
+          AR_icache = 6'b000100,//icache read
+          AR_dbuffer = 6'b000010,//dbuffer read
+          AR_WAIT = 6'b000001;
+          //AR_DONE = 7'b0000001;
 reg [5:0] rstate;//r通道状态机
 parameter R_START = 6'b100000,
 	      R_uncache = 6'b010000,//uncache read
@@ -114,20 +116,19 @@ parameter R_START = 6'b100000,
           R_icache = 6'b000100,//icache read
           R_dbuffer = 6'b000010,//dbuffer read
           R_DONE = 6'b000001;
-reg [6:0] awstate;//写请求通道状态机
-parameter AW_START     = 7'b1000000,
-          AW_uncache   = 7'b0100000,
-          AW_dcache    = 7'b0010000,
-          AW_uncache_w = 7'b0001000,
-          AW_dcache_w  = 7'b0000100,
-          AW_WAIT      = 7'b0000010,
-          AW_DONE      = 7'b0000001;
+reg [5:0] awstate;//写请求通道状态机
+parameter AW_START     = 6'b100000,
+          AW_uncache   = 6'b010000,
+          AW_dcache    = 6'b001000,
+          AW_uncache_w = 6'b000100,
+          AW_dcache_w  = 6'b000010,
+          AW_WAIT      = 6'b000001;
+          //AW_DONE      = 7'b0000001;
 
 reg  [ 2:0] arsize_buf;
 reg  [31:0] araddr_buf;
 reg  uncache_refresh_1;
 reg  uncache_refresh_2;
-reg  last_buffer;
 assign arstate0 = arstate;
 assign rstate0 = rstate;
 assign awstate0 = awstate;
@@ -136,7 +137,6 @@ assign raddr0 = araddr_buf;
 always @(posedge clk) begin
     if(rst) begin
         arstate <= AR_START;
-        last_buffer <= 1'b0;
     end 
     else begin
         case(arstate)
@@ -145,17 +145,14 @@ always @(posedge clk) begin
                     arstate <= AR_uncache;
                     araddr_buf <= uncache_addr;
                     arsize_buf <= uncache_rsize;
-                end else if(dcache_ren & dbuffer_hit & ~dcache_wen) begin
+                end else if(dcache_ren & dbuffer_hit) begin
                     if(dbuffer_ren) begin
                         arstate <= AR_dbuffer;
                         araddr_buf <= dbuffer_raddr;
                     end else begin
                         arstate <= AR_START;
                     end
-                end else if(dcache_ren & dbuffer_hit & dcache_wen) begin
-                    arstate <= AR_DONE;
-                    araddr_buf <= dcache_raddr;
-                end else if(dcache_ren && ~dcache_refresh) begin
+                end else if(dcache_ren) begin
                     arstate <= AR_dcache;
                     araddr_buf <= dcache_raddr;
                 end else if(icache_ren) begin
@@ -192,37 +189,15 @@ always @(posedge clk) begin
             AR_dbuffer: begin
                 if(arready & arvalid) begin
                     arstate <= AR_WAIT;
-                    last_buffer <= 1'b1;
                 end else begin
                     arstate <= AR_dbuffer;
                 end
             end
             AR_WAIT: begin
                 if(rstate == R_DONE) begin
-                    if(last_buffer) begin
-                        last_buffer <= 1'b0;
-                        arstate <= AR_START;
-                    end else if(dcache_ren && dcache_wen) begin 
-                        arstate <= AR_DONE;
-                    end else if(dcache_ren && ~dcache_wen) begin
-                        arstate <= AR_START;
-                    end else begin
-                        arstate <= AR_START;
-                    end
+                    arstate <= AR_START;
                 end else begin
                     arstate <= AR_WAIT;
-                end
-            end
-            AR_DONE: begin
-                if(awstate == AW_DONE) begin
-                    if(dbuffer_ren) begin
-                        arstate <= AR_dbuffer;
-                        araddr_buf <= dbuffer_raddr;
-                    end else begin
-                        arstate <= AR_START;
-                    end
-                end else begin
-                    arstate <= AR_DONE;
                 end
             end
             default: arstate <= AR_START;
@@ -242,6 +217,7 @@ assign arlen = (arstate == AR_uncache) ? 4'b0 :
                (arstate == AR_dbuffer) ? 4'hf : 4'b0;
 assign arsize = (arstate == AR_uncache) ? arsize_buf : 3'b010;
 assign icache_arready = (arstate == AR_icache);
+assign dcache_arready = (arstate == AR_dcache);
 
 
 //读响应通道
@@ -354,7 +330,7 @@ reg [511:0] dcacheline_old_buf;
 reg [2:0] uncache_size;
 reg uncache_w;
 
-assign axi_aw_free = (awstate == AW_START) | (waddr_buf == dcache_waddr);
+assign axi_aw_free = (awstate == AW_START) | (waddr_buf == dcache_awaddr);
 
 always @(posedge clk) begin
     if(rst) begin
@@ -379,9 +355,10 @@ always @(posedge clk) begin
                         4'b1111: uncache_size <= 3'b010;
                         default: uncache_size <= 3'b010; 
                     endcase
-                end else if(dcache_wen && !dcache_refresh) begin
+                end else if(dcache_wen) begin
                     awstate <= AW_dcache;
-                    waddr_buf <= dcache_waddr;
+                    waddr_buf <= dcache_awaddr;
+                    dcacheline_old_buf <= dcache_cacheline_old;
                 end else begin
                     awstate <= AW_START;
                 end
@@ -394,7 +371,6 @@ always @(posedge clk) begin
                 end
             end
             AW_dcache: begin
-                dcacheline_old_buf <= dcache_cacheline_old;
                 if(awready & awvalid) begin
                     awstate <= AW_dcache_w;
                 end else begin
@@ -426,17 +402,10 @@ always @(posedge clk) begin
                         awstate <= AW_START;
                         uncache_w <= 1'b0;
                     end else begin
-                        awstate <= AW_DONE;
+                        awstate <= AW_START;
                     end
                 end else begin
                     awstate <= AW_WAIT;
-                end
-            end
-            AW_DONE: begin
-                if(arstate == AR_DONE) begin
-                    awstate <= AW_START;
-                end else begin
-                    awstate <= AW_DONE;
                 end
             end
             default: awstate <= AW_START;
@@ -465,5 +434,6 @@ assign wvalid  = (awstate == AW_uncache_w) | (awstate == AW_dcache_w);
 assign bready = 1'b1;
 
 assign uncache_refresh = uncache_refresh_1 | uncache_refresh_2;
+assign dcache_awready = (awstate == AW_dcache);
 
 endmodule
