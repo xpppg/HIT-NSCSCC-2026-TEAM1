@@ -338,20 +338,20 @@ module core_top(
 
         .stallreq      (stallreq_dcache      ),
         .sram_rdata    (dcache_temp_rdata    ),
-        .miss          (dcache_miss          ),
-        .raddr         (dcache_raddr         ),
-        .waddr         (dcache_waddr         ),
-        .write_back    (dcache_write_back    ),
+        .axi_ren       (dcache_miss          ),
+        .axi_raddr     (dcache_raddr         ),
+        .axi_waddr     (dcache_waddr         ),
+        .axi_wen       (dcache_write_back    ),
         .cacheline_old (dcache_cacheline_old )
     );
-    /*
+    
     assign dcache_refresh = dcache_refresh_axi | dcache_refresh_buffer;
     assign dcache_cacheline_new = dcache_refresh_axi ? dcache_cacheline_new_axi : dcache_cacheline_new_buffer;
-    */
+    
     assign dcache_refresh = dcache_refresh_axi;
     assign dcache_cacheline_new = dcache_cacheline_new_axi;
-/*
-    dbuffer u_dbuffer(
+
+    /*dbuffer u_dbuffer(
         .clk           (clk           ),
         .rst           (rst           ),
 
@@ -359,18 +359,18 @@ module core_top(
         .cache_raddr   (dcache_raddr  ),
         .cache_wen     (dcache_write_back  ),
         .cache_waddr   (dcache_waddr       ),
-        .buffer_hit    (                   ),
-        .cache_refresh (                   ),
+        .buffer_hit    (dbuffer_hit   ),
+        .cache_refresh (dcache_refresh_buffer),
         .buffer_cacheline_old (dcache_cacheline_new_buffer),
 
-        .buffer_ren    (              ),
-        .buffer_raddr  (              ),
+        .buffer_ren    (dbuffer_ren   ),
+        .buffer_raddr  (dbuffer_raddr ),
 
         .axi_aw_free   (axi_aw_free),
         .buffer_refresh(dbuffer_refresh),
         .buffer_cacheline_new (dbuffer_cacheline_new)
-    );
-*/
+    );*/
+
     assign dbuffer_hit = 1'b0;
     assign dcache_refresh_buffer = 1'b0;
     assign dbuffer_ren = 1'b0;

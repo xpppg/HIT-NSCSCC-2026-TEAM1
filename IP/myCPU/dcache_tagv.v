@@ -1,27 +1,22 @@
 `include "def_cache.vh"
-// 单行16条的版本
 module dcache_tag_v5(
     input wire clk,
     input wire rst,
-    input wire flush,
     
     output wire stallreq,
 
-    input wire cached,   //  根据是不是uncache，来控制cacheline是否可复用
+    input wire cached,   
 
     // sram_port
     input wire sram_en,
     input wire [3:0] sram_wen,
     input wire [31:0] sram_addr,
     input wire [31:0] sram_waddr,
-    // input wire [31:0] sram_wdata,
-    // output wire [31:0] sram_rdata,
     // axi
     input wire refresh, // 刷新,控制新pc写入
 
-    output wire miss,
-    output wire [31:0] axi_raddr,
-    output wire write_back,
+    output wire axi_ren,
+    output wire axi_wen,
     output wire [31:0] axi_waddr,
 
     // cache_data
@@ -31,7 +26,7 @@ module dcache_tag_v5(
 );
     reg [`TAG_WIDTH-1:0] tag_way0 [`INDEX_WIDTH-1:0]; // v + tag 
     reg [`TAG_WIDTH-1:0] tag_way1 [`INDEX_WIDTH-1:0];
-    reg [`INDEX_WIDTH-1:0] lru_r;
+    reg [63:0] lru_r;
     wire [`TAG_WIDTH-2:0] tag;
     wire [`TAG_WIDTH-2:0] tag1;
     wire [5:0] index;
@@ -48,8 +43,8 @@ module dcache_tag_v5(
     wire hit_way1_simple;
     wire [31:0] axi_waddr_way0;
     wire [31:0] axi_waddr_way1;
-    wire write_back_way0;
-    wire write_back_way1;
+    wire axi_wen_way0;
+    wire axi_wen_way1;
     
     assign cached_v = cached;
     
@@ -65,18 +60,11 @@ module dcache_tag_v5(
         offset1
     } = sram_waddr;
 
-    // tag_dist_ram u_tag_ram(
-    //     .clk(clk),
-    //     .we(refresh),
-    //     .a(index),
-    //     .d({cached_v,tag}),
-    //     .spo(tag_ram_out)
-    // );
 
     // lru lru_r指向的即为最闲的那个
     always @ (posedge clk) begin
         if (rst) begin
-            lru_r  <= {`INDEX_WIDTH'b0};
+            lru_r  <= {64'b0};
         end
         else if (hit_way0 & ~hit_way1) begin
             lru_r[index] <= 1'b1;
@@ -247,14 +235,14 @@ module dcache_tag_v5(
         hit_way1,
         hit_way0
     };
-    assign hit_way0 = ~flush & cached_v & sram_en & ({1'b1,tag} == tag_way0[index]);
-    assign hit_way1 = ~flush & cached_v & sram_en & ({1'b1,tag} == tag_way1[index]);
-    assign miss = cached_v & sram_en & ~(hit_way0|hit_way1) & ~flush;
-    assign stallreq = miss;
-    assign axi_raddr = cached_v ? {sram_addr[31:6],6'b0} : sram_addr;
-    assign write_back = flush ? 1'b0 : lru ? write_back_way1 : write_back_way0;
-    assign write_back_way0 = cached_v & sram_en & miss & tag_way0[index][`TAG_WIDTH-1];
-    assign write_back_way1 = cached_v & sram_en & miss & tag_way1[index][`TAG_WIDTH-1];
+    assign hit_way0 = cached_v & sram_en & ({1'b1,tag} == tag_way0[index]);
+    assign hit_way1 = cached_v & sram_en & ({1'b1,tag} == tag_way1[index]);
+    assign axi_ren = cached_v & sram_en & ~(hit_way0|hit_way1);
+    assign stallreq = axi_ren;
+    // assign axi_raddr = cached_v ? {sram_addr[31:6],6'b0} : sram_addr;
+    assign axi_wen = lru ? axi_wen_way1 : axi_wen_way0;
+    assign axi_wen_way0 = axi_ren & tag_way0[index][20];
+    assign axi_wen_way1 = axi_ren & tag_way1[index][20];
     assign axi_waddr = lru_r[index] ? axi_waddr_way1 : axi_waddr_way0;
     assign axi_waddr_way0 = {
         tag_way0[index][`TAG_WIDTH-2:0],

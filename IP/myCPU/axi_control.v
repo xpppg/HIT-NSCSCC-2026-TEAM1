@@ -6,9 +6,9 @@ module axi_control(
     input  wire icache_ren, 
     output wire icache_arready,
     input  wire [31:0] icache_raddr,
-    output wire [511:0] icache_cacheline_new,
-
+    
     output reg  icache_refresh, 
+    output wire [511:0] icache_cacheline_new,
 
     // dcache 
     input  wire dcache_ren, 
