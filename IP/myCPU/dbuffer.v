@@ -36,7 +36,8 @@ reg  cache_refresh1;
 reg  cache_refresh2;
 wire flush1;
 wire flush2;
-wire flush;
+wire flush3;
+reg  flush3_flag;
 reg  buffer_inv;
 
 reg [1:0] pre_stage;//预取状态机
@@ -50,6 +51,7 @@ assign buffer_hit = buffer_hit1 | buffer_hit2;
 
 assign flush1 = cache_wen && (cache_waddr[31:6] == buffer_tag);
 assign flush2 = cache_wen && (cache_waddr[31:6] == buffer_tag2);
+assign flush3 = cache_wen && (cache_waddr[31:6] == buffer_raddr[31:6]);
 
 always @(posedge clk) begin
     if(rst) begin
@@ -100,7 +102,7 @@ always @(posedge clk) begin
         buffer_v2 <= 1'b0;
     end 
     else begin
-        if(buffer_refresh) begin
+        if(buffer_refresh && ~flush3 && ~flush3_flag) begin
             buffer_v <= 1'b1;
             buffer_v2 <= buffer_v;
         end 
@@ -118,6 +120,7 @@ always @(posedge clk) begin
     if(rst) begin
         pre_stage <= IDLE;
         buffer_ren <= 1'b0;
+        buffer_raddr <= 32'b0;
     end 
     else begin
         case(pre_stage)
@@ -134,10 +137,12 @@ always @(posedge clk) begin
                 if(buffer_refresh) begin
                     pre_stage <= IDLE;
                     buffer_ren <= 1'b0;
-                    buffer_way <= buffer_cacheline_new;
-                    buffer_tag <= buffer_raddr[31:6];
-                    buffer_way2 <= buffer_way;
-                    buffer_tag2 <= buffer_tag;
+                    if(~flush3 & ~flush3_flag) begin
+                        buffer_way <= buffer_cacheline_new;
+                        buffer_tag <= buffer_raddr[31:6];
+                        buffer_way2 <= buffer_way;
+                        buffer_tag2 <= buffer_tag;
+                    end
                 end else begin
                     pre_stage <= WAIT;
                 end
@@ -147,6 +152,18 @@ always @(posedge clk) begin
     end
 end
 
+always @(posedge clk) begin
+    if(rst) begin
+        flush3_flag <= 1'b0;
+    end 
+    else begin
+        if(flush3 && pre_stage == WAIT && ~buffer_refresh) begin
+            flush3_flag <= 1'b1;
+        end else if(buffer_refresh) begin
+            flush3_flag <= 1'b0;
+        end
+    end
+end
 
 //wire debug1;
 //wire debug2;
