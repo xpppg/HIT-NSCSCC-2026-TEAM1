@@ -1659,6 +1659,48 @@ DifftestGRegState DifftestGRegState(
 
 `endif 
 
+reg  [31:0] timer1;
+reg  [31:0] timer2;
+reg  [31:0] timer3;
+reg  [31:0] timer4;
+reg  [31:0] timer5;
+
+always @(posedge clk) begin
+    if(reset) begin
+        timer1 <= 32'b0;
+    end
+    else if(br_taken & actual_taken) begin
+        timer1 <= timer1 + 1'b1;
+    end
+end
+
+always @(posedge clk) begin
+    if(reset) begin
+        timer2 <= 32'b0;
+    end
+    else if(br_taken & ~actual_taken) begin
+        timer2 <= timer2 + 1'b1;
+    end
+end
+
+always @(posedge clk) begin
+    if(reset) begin
+        timer3 <= 32'b0;
+    end
+    else if(~br_taken & inst_br) begin
+        timer3 <= timer3 + 1'b1;
+    end
+end
+
+always @(posedge clk) begin
+    if(reset) begin
+        timer5 <= 32'b0;
+    end
+    else if(inst_br) begin
+        timer5 <= timer5 + 1'b1;
+    end
+end
+
 
 
 

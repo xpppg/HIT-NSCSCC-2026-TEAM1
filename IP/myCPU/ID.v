@@ -248,7 +248,7 @@ assign inst_not_exist = ~(inst_add_w | inst_sub_w | inst_slt | inst_sltu | inst_
                     | inst_ertn | inst_rdcntid_w | inst_rdcntvl_w | inst_rdcntvh_w
                     | inst_tlbsrch | inst_tlbrd | inst_tlbfill | inst_tlbwr | inst_invtlb 
                     | inst_cacop | inst_cpucfg | inst_dbar | inst_ibar | inst_ll_w | inst_sc_w | inst_idle
-                    ) & (pc != 32'h1bfffffc);
+                    );
 
 assign alu_op[ 0] = inst_add_w | inst_addi_w | inst_ld_w | inst_st_w
                     | inst_jirl | inst_bl | inst_pcaddu12i 
@@ -427,21 +427,6 @@ assign inst_normal = inst_add_w | inst_sub_w | inst_addi_w | inst_lu12i_w |
                      inst_slli_w | inst_srli_w | inst_srai_w |
                      inst_cpucfg | inst_cacop | inst_dbar | inst_ibar;
 
-/////////////////////////////////////////////////////////////////////以下移走
-/*assign csr_wmask_ID  = inst_csrxchg ? rj_value : 32'hffffffff;
-assign csr_wvalue_ID = rkd_value;
-assign csr_flush_ID  = inst_ertn & valid & ~br_taken;
-assign csr_rold_ID   = csr_we;
-assign ll_w = inst_ll_w & valid;
-
-//TLB相关
-assign tlbsrch_ID = inst_tlbsrch;
-assign tlbrd_ID   = inst_tlbrd;
-assign tlbwr_ID   = inst_tlbwr;
-assign tlbfill_ID = inst_tlbfill;
-assign tlbinvtlb_ID = inst_invtlb;
-assign reg_asid = rf_rdata1[9:0];
-assign reg_vppn = rf_rdata2[31:12];*/
 
 
 

@@ -434,6 +434,6 @@ assign wvalid  = (awstate == AW_uncache_w) | (awstate == AW_dcache_w);
 assign bready = 1'b1;
 
 assign uncache_refresh = uncache_refresh_1 | uncache_refresh_2;
-assign dcache_awready = (awstate == AW_dcache);
+assign dcache_awready = (awstate == AW_START) && ~uncache_en;
 
 endmodule
