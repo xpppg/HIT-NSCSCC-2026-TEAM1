@@ -1,11 +1,5 @@
-# Chiplab用户手册 
-## 前言
-chiplab项目致力于构建基于LoongArch32 Reduced的soc敏捷开发平台。如发现问题请在issues提出。
+本项目为NSCSCC 2026的参赛作品，处于开发阶段中，不代表最终品质...
 
-详细介绍请参考[CHIPLAB使用介绍](https://chiplab.readthedocs.io/)
+当前其他队伍参赛选手不得复制，抄袭本仓库内容，或进行任何违反大赛诚信要求的行为。如有违反，所可能造成的一切不利后果由违反者本人承担。
 
-## 龙芯杯团体赛
-团体赛相关详细说明见[chiplab/nscscc_readme.md](./nscscc_readme.md)
-
-### 交流群
- [slack交流群](https://join.slack.com/t/chiplabworkspace/shared_invite/zt-v1927dwg-qqnHNTcAeko7QsUsdCRoPA)
+大赛结束后，本项目将按照参赛开源承诺书的要求，遵循特定协议进行开源，以用于交流共享。
