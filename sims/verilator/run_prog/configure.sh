@@ -13,6 +13,7 @@ echo "  --run software        	set software list(use ',' select multiple softwar
                                 my_program memset dhrystone coremark linux rtthread
                                 c_prg/memcmp c_prg/inner_product c_prg/lookup_table
                                 c_prg/loop_induction c_prg/minmax_sequence c_prg/product_sequence
+                                uboot
 
 
      " 
@@ -451,6 +452,15 @@ do
             mkdir -p ./log/
             ;;
         linux) 
+            RUN_FUNC=n
+            RUN_C=y
+            DEAD_CLOCK_EN=n
+            OUTPUT_PC_INFO=n
+            OUTPUT_UART_INFO=y
+            mkdir -p ./obj/
+            mkdir -p ./log/
+            ;;
+        uboot) 
             RUN_FUNC=n
             RUN_C=y
             DEAD_CLOCK_EN=n

@@ -248,7 +248,6 @@ soft_compile:
 	@for soft in ${soft_compile_list}; \
 	do 	\
 	make -C ${CHIPLAB_HOME}/software/examples/$${soft} || exit "$$?";\
-	rm -rf ./obj/$${soft}_obj;	\
 	mkdir -p ./obj/$${soft}_obj;  \
 	mv ${CHIPLAB_HOME}/software/examples/$${soft}/obj ./obj/$${soft}_obj;	\
 	mkdir -p ./log/$${soft}_log;	\
@@ -271,7 +270,6 @@ ifeq ('${TRACE_COMP}', 'y')
 	make golden_trace_make -C ./tmp -f ../Makefile_run;	\
 	mkdir -p ./log/$${soft}_log;	\
 	mv ./tmp/golden_trace.txt ./log/$${soft}_log/; \
-	rm -rf ./tmp;    \
 	done 
 endif 
 
@@ -295,7 +293,6 @@ ifeq ('${TRACE_COMP}', 'y')
 	mv ./tmp/uart_output.txt.real ./log/$${soft}_log/;	\
 	mv ./tmp/mem_trace.txt ./log/$${soft}_log/;         \
 	mv ./tmp/logs/*.${WAVEFILE} ./log/$${soft}_log/;	\
-	rm -rf ./tmp;    \
 	done 
 else 
 	@for soft in ${soft_list}; \
@@ -311,7 +308,6 @@ else
 	mv ./tmp/uart_output.txt.real ./log/$${soft}_log/;	\
 	mv ./tmp/mem_trace.txt ./log/$${soft}_log/;         \
 	mv ./tmp/logs/*.${WAVEFILE} ./log/$${soft}_log/;	\
-	rm -rf ./tmp; \
 	done 
 endif
 
