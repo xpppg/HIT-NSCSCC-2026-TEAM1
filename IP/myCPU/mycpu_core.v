@@ -764,30 +764,30 @@ regfile u_regfile(
 `endif
 );
 
-assign rf_rdata1 = (is_r1 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ~ex_turning) ? EXE_forward_result :
+assign rf_rdata1 = (is_r1 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ex_turning) ? EXE_forward_result :
                    (is_r1 == ex_dest_2 & ex_dest_we_2 & sub_EXE_valid & ex_dest_from_2[0] & EXE_forward_ok_2) ? EXE_forward_result_2 :
-                   (is_r1 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ex_turning) ? EXE_forward_result :
+                   (is_r1 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ~ex_turning) ? EXE_forward_result :
                    ~rf_we_turning ? (is_r1 == rf_waddr2 & rf_we2) ? rf_wdata2 : 
                    (is_r1 == rf_waddr  & rf_we) ? rf_wdata : rf_rdata1_out : 
                    (is_r1 == rf_waddr & rf_we ) ? rf_wdata :
                    (is_r1 == rf_waddr2  & rf_we2) ? rf_wdata2 : rf_rdata1_out;
-assign rf_rdata2 = (is_r2 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ~ex_turning) ? EXE_forward_result :
+assign rf_rdata2 = (is_r2 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ex_turning) ? EXE_forward_result :
                    (is_r2 == ex_dest_2 & ex_dest_we_2 & sub_EXE_valid & ex_dest_from_2[0] & EXE_forward_ok_2) ? EXE_forward_result_2 :
-                   (is_r2 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ex_turning) ? EXE_forward_result :
+                   (is_r2 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ~ex_turning) ? EXE_forward_result :
                    ~rf_we_turning ? (is_r2 == rf_waddr2 & rf_we2) ? rf_wdata2 : 
                    (is_r2 == rf_waddr  & rf_we) ? rf_wdata : rf_rdata2_out : 
                    (is_r2 == rf_waddr & rf_we ) ? rf_wdata :
                    (is_r2 == rf_waddr2  & rf_we2) ? rf_wdata2 : rf_rdata2_out;
-assign rf_rdata3 = (is_r3 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ~ex_turning) ? EXE_forward_result :
+assign rf_rdata3 = (is_r3 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ex_turning) ? EXE_forward_result :
                    (is_r3 == ex_dest_2 & ex_dest_we_2 & sub_EXE_valid & ex_dest_from_2[0] & EXE_forward_ok_2) ? EXE_forward_result_2 :
-                   (is_r3 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ex_turning) ? EXE_forward_result :
+                   (is_r3 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ~ex_turning) ? EXE_forward_result :
                    ~rf_we_turning ? (is_r3 == rf_waddr2 & rf_we2) ? rf_wdata2 : 
                    (is_r3 == rf_waddr  & rf_we) ? rf_wdata : rf_rdata3_out : 
                    (is_r3 == rf_waddr & rf_we ) ? rf_wdata :
                    (is_r3 == rf_waddr2  & rf_we2) ? rf_wdata2 : rf_rdata3_out;
-assign rf_rdata4 = (is_r4 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ~ex_turning) ? EXE_forward_result :
+assign rf_rdata4 = (is_r4 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ex_turning) ? EXE_forward_result :
                    (is_r4 == ex_dest_2 & ex_dest_we_2 & sub_EXE_valid & ex_dest_from_2[0] & EXE_forward_ok_2) ? EXE_forward_result_2 :
-                   (is_r4 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ex_turning) ? EXE_forward_result :
+                   (is_r4 == ex_dest & ex_dest_we & EXE_valid & ex_dest_from[0] & EXE_forward_ok & ~ex_turning) ? EXE_forward_result :
                    ~rf_we_turning ? (is_r4 == rf_waddr2 & rf_we2) ? rf_wdata2 : 
                    (is_r4 == rf_waddr  & rf_we) ? rf_wdata : rf_rdata4_out : 
                    (is_r4 == rf_waddr & rf_we ) ? rf_wdata :
