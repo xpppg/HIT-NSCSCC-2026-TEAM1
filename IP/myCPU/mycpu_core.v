@@ -292,6 +292,10 @@ wire [31:0] pred_target_pre_IF_2;
 wire [31:0] pred_target_IF2_2;
 wire actual_taken;
 wire [31:0] actual_target;
+wire call;
+wire [31:0] call_target;
+wire ret;
+wire ret_wrong;
 
 wire BPU_rst;
 
@@ -364,7 +368,11 @@ BPU u_BPU(
     .br_target     (actual_target),
     .br_pht        (br_pht),
     .inst_br       (wb_inst_br & MEM_valid),
-    .actual_taken  (wb_actual_taken & MEM_valid)
+    .actual_taken  (wb_actual_taken & MEM_valid),
+    .call          (call),
+    .call_target   (call_target),
+    .ret           (ret),
+    .ret_wrong     (ret_wrong)
 );
 
 IF u_IF(
@@ -476,8 +484,8 @@ wire [31:0] id_imm3;
 wire [31:0] id_imm4;
 wire [18:0] id_alu_op;
 wire [18:0] id_alu_op_2;
-wire [ 8:0] id_bru_op;
-wire [ 8:0] id_bru_op_2;
+wire [10:0] id_bru_op;
+wire [10:0] id_bru_op_2;
 wire [31:0] id_bru_imm;
 wire [31:0] id_bru_imm_2;
 wire [ 9:0] id_lsu_op;
@@ -514,8 +522,8 @@ reg [31:0] is_imm3;
 reg [31:0] is_imm4;
 reg [18:0] is_alu_op;
 reg [18:0] is_alu_op_2;
-reg [ 8:0] is_bru_op;
-reg [ 8:0] is_bru_op_2;
+reg [10:0] is_bru_op;
+reg [10:0] is_bru_op_2;
 reg [31:0] is_bru_imm;
 reg [31:0] is_bru_imm_2;
 reg [ 9:0] is_lsu_op;
@@ -832,7 +840,7 @@ reg [31:0] ex_alu_src4;
 reg [18:0] ex_alu_op_2;
 reg [31:0] ex_lsu_imm;
 reg [31:0] ex_bru_imm;
-reg [ 8:0] ex_bru_op;
+reg [10:0] ex_bru_op;
 reg [31:0] ex_rj_value;
 reg [31:0] ex_rd_value;
 reg [ 9:0] ex_lsu_op;
@@ -884,6 +892,10 @@ wire [31:0] ex_br_target;
 wire [ 1:0] ex_br_pht;
 wire        ex_actual_taken;
 wire [31:0] ex_actual_target;
+wire        ex_call;
+wire        ex_ret;
+wire        ex_ret_wrong;
+wire [31:0] ex_call_target;
 
 //EXE阶段流水线缓存
 always @(posedge clk) begin
@@ -1030,7 +1042,11 @@ bru u_bru(
     .br_target(ex_br_target),
     .br_pht(ex_br_pht),
     .actual_taken(ex_actual_taken  ),
-    .actual_target(ex_actual_target)
+    .actual_target(ex_actual_target),
+    .call(ex_call),
+    .call_addr(ex_call_target),
+    .ret(ex_ret),
+    .ret_wrong(ex_ret_wrong)
     );
 
 lsu u_lsu(
@@ -1120,12 +1136,18 @@ reg [31:0] wb_br_target;
 reg [ 1:0] wb_br_pht;
 reg        wb_actual_taken;
 reg [31:0] wb_actual_target;
+reg        wb_call;
+reg [31:0] wb_call_target;
+reg        wb_ret;
+reg        wb_ret_wrong;
 
 reg  [31:0] wb_mem_paddr;
 reg         wb_mem_en;
 reg  [ 3:0] wb_mem_wen;
 reg  [31:0] wb_mem_wdata;
 reg         wb_dcache_v;
+
+reg         wb_commit_once;
 
 // MEM阶段流水线缓存
 always @(posedge clk) begin
@@ -1179,6 +1201,10 @@ always @(posedge clk) begin
         wb_br_pht                 <= ex_br_pht;
         wb_actual_taken           <= ex_actual_taken;
         wb_actual_target          <= ex_actual_target;
+        wb_call                   <= ex_call;
+        wb_call_target            <= ex_call_target;
+        wb_ret                    <= ex_ret;
+        wb_ret_wrong              <= ex_ret_wrong;
 
         wb_mem_en                 <= ex_mem_en & ex_mem_wr;
         wb_mem_wen                <= ex_mem_wen;
@@ -1200,6 +1226,18 @@ always @(posedge clk) begin
     begin 
         MEM_valid <= 1'b0;
         sub_MEM_valid <= 1'b0;
+    end
+end
+
+always @(posedge clk) begin
+    if(reset) 
+    begin
+        wb_commit_once <= 1'b0;
+    end else if(EXE_ready_go & MEM_allowin)
+    begin 
+        wb_commit_once <= 1'b1;
+    end else begin
+        wb_commit_once <= 1'b0;
     end
 end
 
@@ -1232,12 +1270,16 @@ assign csr_wvalue = wb_csr_wvalue;
 assign ertn_flush = wb_ertn & ~wb_ex & MEM_valid;
 
 //跳转
-assign inst_br = wb_inst_br & MEM_ready_go & WB_allowin & MEM_valid & ~wb_ex & ~wb_ertn;
+assign inst_br = wb_inst_br & wb_commit_once & MEM_valid & ~wb_ex & ~wb_ertn;
 assign br_taken = wb_br_taken & MEM_ready_go & WB_allowin & MEM_valid & ~wb_ex & ~wb_ertn;
 assign br_target = wb_br_target;
 assign br_pht = wb_br_pht;
-assign actual_taken = wb_actual_taken & MEM_ready_go & WB_allowin & MEM_valid & ~wb_ex & ~wb_ertn;
+assign actual_taken = wb_actual_taken & wb_commit_once & MEM_valid & ~wb_ex & ~wb_ertn;
 assign actual_target = wb_actual_target;
+assign call = wb_call & wb_commit_once & MEM_valid & ~wb_ex & ~wb_ertn;
+assign call_target = wb_call_target;
+assign ret = wb_ret & wb_commit_once & MEM_valid & ~wb_ex & ~wb_ertn;
+assign ret_wrong = wb_ret_wrong & wb_commit_once & MEM_valid & ~wb_ex & ~wb_ertn;
 
 //data
 assign data_sram_en = (ex_mem_en & ~ex_mem_wr) | (wb_mem_en & MEM_ready_go & WB_allowin & MEM_valid);

@@ -1,5 +1,5 @@
-RUN_SOFTWARE=fireye/C0
-TRACE_COMP=y
+RUN_SOFTWARE=nscscc_perf/dhrystone
+TRACE_COMP=n
 SIMU_TRACE=y
 MEM_TRACE=n
 RUN_FUNC=n

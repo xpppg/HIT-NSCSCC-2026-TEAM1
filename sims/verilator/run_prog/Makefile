@@ -43,6 +43,9 @@ empty=
 space=${empty} 
 soft_list=$(subst ${comma},${space},${RUN_SOFTWARE})
 
+# nscscc_perf 预编译产物目录 (测试名直接对应 nscscc_perf/obj/<name>/)
+NSCSCC_DIR=${CHIPLAB_HOME}/software/examples/nscscc_perf
+
 all:env_test func 
 func:compile 
 	make soft 
@@ -247,9 +250,30 @@ soft_compile:
 	@echo "============================================================================================================="
 	@for soft in ${soft_compile_list}; \
 	do 	\
-	make -C ${CHIPLAB_HOME}/software/examples/$${soft} || exit "$$?";\
-	mkdir -p ./obj/$${soft}_obj;  \
-	mv ${CHIPLAB_HOME}/software/examples/$${soft}/obj ./obj/$${soft}_obj;	\
+	case "$${soft}" in \
+	nscscc_perf/*) \
+		echo "==> [nscscc_perf] Using prebuilt: $${soft#nscscc_perf/}"; \
+		soft2="$${soft#nscscc_perf/}"; \
+		mkdir -p ./obj/$${soft}_obj/obj; \
+		cp -r ${NSCSCC_DIR}/obj/$${soft2}/* ./obj/$${soft}_obj/obj/; \
+		cd ./obj/$${soft}_obj/obj && gcc -o convert ${CHIPLAB_HOME}/software/bsp/env/convert.c && ./convert inst_data.bin ./ && rm -f convert; \
+		;; \
+	*) \
+		if [ -d "${CHIPLAB_HOME}/software/examples/$${soft}" ]; then \
+			echo "==> [examples] Building: $${soft}"; \
+			make -C ${CHIPLAB_HOME}/software/examples/$${soft} || exit "$$?";\
+			mkdir -p ./obj/$${soft}_obj;  \
+			mv ${CHIPLAB_HOME}/software/examples/$${soft}/obj ./obj/$${soft}_obj;	\
+		elif [ -d "${NSCSCC_DIR}/obj/$${soft}" ]; then \
+			echo "==> [nscscc_perf] Using prebuilt: $${soft}"; \
+			mkdir -p ./obj/$${soft}_obj/obj; \
+			cp -r ${NSCSCC_DIR}/obj/$${soft}/* ./obj/$${soft}_obj/obj/; \
+			cd ./obj/$${soft}_obj/obj && gcc -o convert ${CHIPLAB_HOME}/software/bsp/env/convert.c && ./convert inst_data.bin ./ && rm -f convert; \
+		else \
+			echo "Software $${soft} source not found!!"; exit 1; \
+		fi; \
+		;; \
+	esac; \
 	mkdir -p ./log/$${soft}_log;	\
 	done 
 

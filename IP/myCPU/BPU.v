@@ -18,23 +18,32 @@ module BPU(
     input  wire [31:0] br_target,
     input  wire [ 1:0] br_pht,
     input  wire        inst_br,       
-    input  wire        actual_taken
+    input  wire        actual_taken,
+    input  wire        call,
+    input  wire [31:0] call_target,
+    input  wire        ret,
+    input  wire        ret_wrong
 );
 wire BTB_hit1;
 wire BTB_hit2;
 wire PHT_taken;
 wire PHT_taken_2;
+wire RAS_hit;
+wire RAS_hit2;
+wire [31:0] RAS_target;
+wire [31:0] BTB_target;
+wire [31:0] BTB_target2;
 
     BTB u_BTB(
         .clk        (clk),
         .rst        (rst),
 
         .pc         (pc),
-        .pred_target(pred_target),
+        .pred_target(BTB_target),
         .BTB_hit1   (BTB_hit1),
 
         .pc2        (pc2),
-        .pred_target_2(pred_target_2),
+        .pred_target_2(BTB_target2),
         .BTB_hit2   (BTB_hit2),
 
         .BTB_wen    (actual_taken),
@@ -62,20 +71,30 @@ wire PHT_taken_2;
         .actual_taken(actual_taken)
     );
 
-    assign pred_hit1 = BTB_hit1 & PHT_taken;
-    assign pred_hit2 = BTB_hit2 & PHT_taken_2;
+    RAS u_RAS(
+        .clk         (clk),
+        .rst         (clk_rst),
+        
+        .pc          (pc),
+        .pc2         (pc2),
+        .RAS_hit     (RAS_hit),
+        .RAS_hit2    (RAS_hit2),
+        .RAS_target  (RAS_target),
 
-    //RAS u_RAS(
-    //    .clk         (clk),
-    //    .rst         (reset),
-    //    
-    //    .RAS_ren     ((pred_jirl_pre_IF | pred_jirl_pre_IF_2) & pre_IF_ready_go & IF1_allowin),
-    //    .RAS_target  (r1_value),
-    //    .RAS_v       (RAS_v),
+        .br_pc       (br_pc),
+        .RAS_wen     (call),
+        .ret_addr    (call_target),
+        .RAS_ren     (ret),
+        .RAS_wrong   (ret_wrong)
+    );
 
-    //    .RAS_wen     (br_bl),
-    //    .ret_addr    (br_pc + 32'h4)
-    //);
+    assign pred_hit1 = BTB_hit1 & (PHT_taken | RAS_hit);
+    assign pred_hit2 = BTB_hit2 & (PHT_taken_2 | RAS_hit2);
+
+    assign pred_target = RAS_hit ? RAS_target : BTB_target;
+    assign pred_target_2 = RAS_hit2 ? RAS_target : BTB_target2;
+
+    
 endmodule
 
 module BTB(
@@ -483,53 +502,75 @@ endmodule
 module RAS(
     input  wire        clk,
     input  wire        rst,
-    // 读端口
-    input  wire        RAS_ren,
-    output wire [31:0] RAS_target,
-    output wire        RAS_v,
+    
+    input  wire [31:0] pc,
+    input  wire [31:0] pc2,
+    output reg         RAS_hit,
+    output reg         RAS_hit2,
+    output reg  [31:0] RAS_target,
     // 写端口
+    input  wire [31:0] br_pc,
     input  wire        RAS_wen,       
-    input  wire [31:0] ret_addr
+    input  wire [31:0] ret_addr,
+    input  wire        RAS_ren,
+    input  wire        RAS_wrong
 );
-reg [31:0] stack[31:0];
-reg [4:0]  times;
-reg [31:0] total_times;
+reg [1023:0] RAS_v;
+reg [1023:0] RAS_c;//置信度
+reg [31:0] stack[7:0];
+reg [2:0]  times;
 
-wire RAS_full;
-wire RAS_empty;
+wire [9:0] rindex;
+wire [9:0] rindex_2;
+wire [9:0] windex;
 
-assign RAS_full = (times == 5'b11111);
-assign RAS_empty = (times == 5'b0);
-assign RAS_v = ~(times == 5'b0);
+assign rindex   = pc[11:2];
+assign rindex_2 = pc2[11:2];
+assign windex = br_pc[11:2];
 
 always @(posedge clk) begin
     if(rst) begin
-        times <= 5'b0;
-        total_times <= 32'b0;
+        RAS_v <= 1024'b0;
     end 
-    else if(RAS_wen & ~RAS_ren) begin
-        if(RAS_full) begin
-            times <= times;
-        end
-        else begin
-            stack[times + 1'b1] <= ret_addr;
-            times <= times + 1'b1;
-        end
-        total_times <= total_times + 1'b1;
-    end
-    else if(~RAS_wen & RAS_ren & ~RAS_empty) begin
-        if(times == total_times) begin
-            times <= times - 1'b1;
-        end
-        else begin
-            times <= times;
-        end
-        total_times <= total_times - 1'b1;
+    else if(RAS_ren) begin
+        RAS_v[windex] <= 1'b1;
     end
 end
 
-assign RAS_target = RAS_wen ? ret_addr : stack[times];
+always @(posedge clk) begin
+    if(rst) begin
+        RAS_c <= 1024'b0;
+    end 
+    else if(RAS_v[windex] & RAS_wrong) begin
+        RAS_c[windex] <= 1'b1;
+    end
+end
 
 
+always @(posedge clk) begin
+    if(rst) begin
+        times <= 3'b0;
+    end 
+    else if(RAS_wen & ~RAS_ren) begin
+        stack[times] <= ret_addr;
+        times <= times + 1'b1;
+    end
+    else if(~RAS_wen & RAS_ren) begin
+        times <= times - 1'b1;
+    end
+end
+
+always @(posedge clk) begin
+    if(rst) begin
+        RAS_hit <= 1'b0;
+        RAS_hit2 <= 1'b0;
+        RAS_target <= 32'b0;
+    end 
+    else begin
+        RAS_hit <= RAS_v[rindex] & ~RAS_c[rindex];
+        RAS_hit2 <= RAS_v[rindex_2] & ~RAS_c[rindex_2];
+        RAS_target <= stack[times - 1'b1];
+    end 
+end
 
 endmodule

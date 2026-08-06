@@ -488,8 +488,39 @@ do
             mkdir -p ./log/
             ;;
         *)
-            echo "Software $software unavailable!!" 
-            exit
+            # nscscc_perf 预编译测试: nscscc_perf/<name> 或裸名(若在 nscscc_perf/obj 下存在)
+            case $software in
+            nscscc_perf/*)
+                if [ -d "${CHIPLAB_HOME:-$(dirname $0)/../../..}/software/examples/nscscc_perf/obj/${software#nscscc_perf/}" ]; then
+                    RUN_FUNC=n
+                    RUN_C=y
+                    DEAD_CLOCK_EN=n
+                    OUTPUT_PC_INFO=n
+                    OUTPUT_UART_INFO=y
+                    mkdir -p ./obj/
+                    mkdir -p ./log/
+                else
+                    echo "Software $software unavailable!!"
+                    exit
+                fi
+                ;;
+            *)
+                # 裸名: 优先 software/examples/<name>/ (原测试), 其次 nscscc_perf/obj/<name>/
+                if [ -d "${CHIPLAB_HOME:-$(dirname $0)/../../..}/software/examples/$software" ] || \
+                   [ -d "${CHIPLAB_HOME:-$(dirname $0)/../../..}/software/examples/nscscc_perf/obj/$software" ]; then
+                    RUN_FUNC=n
+                    RUN_C=y
+                    DEAD_CLOCK_EN=n
+                    OUTPUT_PC_INFO=n
+                    OUTPUT_UART_INFO=y
+                    mkdir -p ./obj/
+                    mkdir -p ./log/
+                else
+                    echo "Software $software unavailable!!"
+                    exit
+                fi
+                ;;
+            esac
             ;;
     esac 
 done

@@ -12,7 +12,7 @@ module ID(
     output wire [31:0] imm2,
 
     output wire [18:0] alu_op,
-    output wire [ 8:0] bru_op,
+    output wire [10:0] bru_op,
     output wire [31:0] bru_imm,
     output wire [ 9:0] lsu_op,
     output wire [18:0] peu_op,  // invtlb_op = peu_op[18:14]
@@ -121,6 +121,8 @@ wire        inst_ibar;
 wire        inst_ll_w;
 wire        inst_sc_w;
 wire        inst_idle;
+wire        inst_call;
+wire        inst_ret;
 
 wire        need_ui5;
 wire        need_ui12;
@@ -348,6 +350,9 @@ assign dest_from[2] = inst_csrrd | inst_csrwr | inst_csrxchg | inst_rdcntid_w | 
 
 
 //给BRU的信号
+assign inst_call = inst_bl | (inst_jirl & (rd == 5'd1));
+assign inst_ret  = inst_jirl & (rd == 5'd0) & (rj == 5'd1) & (i16 == 16'h0);
+
 assign bru_en = inst_beq | inst_bne | inst_blt | inst_bge | inst_bltu | inst_bgeu | inst_b | inst_bl | inst_jirl;
 assign bru_op[0] = inst_beq;
 assign bru_op[1] = inst_bne;
@@ -358,6 +363,8 @@ assign bru_op[5] = inst_bgeu;
 assign bru_op[6] = inst_b;
 assign bru_op[7] = inst_bl;
 assign bru_op[8] = inst_jirl;
+assign bru_op[9] = inst_call;
+assign bru_op[10] = inst_ret;
 
 assign bru_imm = inst_jirl ? jirl_offs : br_offs;
 
