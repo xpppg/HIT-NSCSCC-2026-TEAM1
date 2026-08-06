@@ -1,4 +1,4 @@
-RUN_SOFTWARE=nscscc_perf/dhrystone
+RUN_SOFTWARE=nscscc_perf/quick_sort
 TRACE_COMP=n
 SIMU_TRACE=y
 MEM_TRACE=n
