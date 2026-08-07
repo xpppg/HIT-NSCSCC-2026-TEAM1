@@ -95,7 +95,7 @@ always @(posedge clk) begin
             end
             SEND: begin
                 if(awready && awvalid)
-                    wstage <= REC;
+                    wstage <= DONE;
             end
             REC: begin
                 wstage <= DONE;
