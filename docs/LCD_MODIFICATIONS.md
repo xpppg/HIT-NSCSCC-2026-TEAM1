@@ -22,6 +22,7 @@ Intel/8080 并口 LCD 控制器，并完成以下配套工作：
 | `fpga/loongson/2019.2/system_run.xpr` | 将 LCD RTL 加入 Vivado 2019.2 工程 |
 | `fpga/loongson/2023.2/system_run.xpr` | 将 LCD RTL 加入 Vivado 2023.2 工程 |
 | `fpga/loongson/soc_up.xdc` | 增加 LCD 管脚和 `LVCMOS33` 约束 |
+| `IP/LCD/rst_rom.coe` | 将 LCD 行窗口结束地址修正为 799（480 × 800） |
 | `software/bsp/env/start_uboot.S` | 新增通用的非缓存 U-Boot 启动入口 |
 | `software/bsp/env/uboot_uncached.lds` | 新增通用的 `0x80300000` U-Boot 链接布局 |
 | `software/bsp/common.mk` | 新增 `make uboot` 并行构建目标 |
@@ -147,7 +148,7 @@ LCD 接口统一设置为 `LVCMOS33`。当前约束来自提供的参考 XDC：
 测试程序位于 `software/examples/lcd_test`，默认参数如下：
 
 - LCD 非缓存基地址：`0x9fa0_0000`；
-- 屏幕分辨率：480 × 864；
+- 屏幕分辨率：480 × 800；
 - 像素格式：RGB565；
 - CPU 时钟：50 MHz；
 - CONFREG 时钟：33 MHz；
@@ -179,6 +180,13 @@ Write）。
 中只占 8 KiB。`lcd_draw_char()` 设置单字符窗口并逐点写入前景色或背景色，
 `lcd_draw_text()` 负责字符串换行和屏幕边界处理，不再需要 FPGA 字符 ROM 或
 硬件文字渲染状态机。
+
+逐行标记测试进一步确认了面板的有效高度是 800 行：向第 800～839 行写绿色、
+第 840～853 行写粉色、第 854～863 行写黄色时，这三段颜色都回绕到了屏幕
+顶部。因此原来的 480 × 864 配置会使最后 64 行覆盖最上面的 64 行，表现为
+界面底部内容出现在顶部以及约半秒一次的闪烁。初始化序列的行结束地址现为
+`0x031f`（十进制 799），逐行诊断程序仍保留 864 行输出，用于复现和定位
+地址回绕问题。
 
 ## 10. 编译和 U-Boot 网络加载
 
@@ -225,7 +233,22 @@ bootelf 0xa3000000
 到链接地址，并跳转到 `0x8030_0000`。程序不会返回 U-Boot，需要复位开发板
 才能停止。
 
-## 11. 验证状态和后续工作
+## 11. Linux fbdev 支持
+
+Linux 使用 `/home/xpg/chiplab-old/la32r-Linux` 源码树。以下参数已统一为
+480 × 800：
+
+- `drivers/video/fbdev/loongson_lcd.c` 中的默认高度；
+- `drivers/video/fbdev/loongson_lcd_init.h` 中的 LCD 行窗口结束地址；
+- `arch/loongarch/boot/dts/loongson/loongson32_ls.dts` 中的 `height` 属性。
+
+驱动内建到内核，设备树也以内建方式使用 `loongson32_ls`。启动新编译的
+`vmlinux` 后，`fbset -fb /dev/fb0` 应报告 `geometry 480 800 480 800 16`，
+此时一帧 RGB565 数据大小为 `480 * 800 * 2 = 768000` 字节。LVGL 测试程序
+位于 `software/lvgl_test_linux`，通过 `/dev/fb0` 输出，不需要修改根文件系统
+即可经 TFTP 下载运行。
+
+## 12. 验证状态和后续工作
 
 目前已经完成裸机程序的交叉编译和 ELF 结构检查。完整验证仍需以下步骤：
 

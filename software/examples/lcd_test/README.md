@@ -49,7 +49,7 @@ The serial console first reports the AXI register self-test and LCD status.
 The panel then cycles through red, green, blue, white, black, vertical color
 bars, and a 16 x 32 ASCII font test page.
 
-The default panel size is 480 x 864. During the build, `coe_to_c.awk` converts
+The default panel size is 480 x 800. During the build, `coe_to_c.awk` converts
 `IP/LCD/rst_rom.coe` into `lcd_init_sequence.h`; the program replays the same
 783 command/data words that were used by the reference hardware controller.
 Bit 16 of each word selects command (`1`) or data (`0`), and bits 15:0 are sent

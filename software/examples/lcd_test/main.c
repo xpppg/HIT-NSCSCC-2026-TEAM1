@@ -47,7 +47,7 @@ unsigned long CORE_CLOCKS_PER_SEC = 50000000UL;
 #endif
 
 #ifndef LCD_HEIGHT
-#define LCD_HEIGHT 864U
+#define LCD_HEIGHT 800U
 #endif
 
 /* RGB565 colors. */

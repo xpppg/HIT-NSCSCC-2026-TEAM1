@@ -788,7 +788,7 @@ static const uint32_t lcd_init_sequence[] = {
     0x00012b02U,
     0x00000003U,
     0x00012b03U,
-    0x0000005fU,
+    0x0000001fU,
     0x00012900U,
     0x00012c00U,
 };
