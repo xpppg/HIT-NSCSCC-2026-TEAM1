@@ -28,7 +28,10 @@ QEMU_LDFLAGS +=	-T $(QEMU_LINKER_SCRIPT) \
 
 LINKER_SCRIPT := $(COMMON_DIR)/env/separate.lds
 QEMU_LINKER_SCRIPT := $(COMMON_DIR)/env/qemu.lds
+UBOOT_LINKER_SCRIPT := $(COMMON_DIR)/env/uboot_uncached.lds
+UBOOT_START_SRC := $(COMMON_DIR)/env/start_uboot.S
 
+APP_ASM_SRCS := $(ASM_SRCS)
 ASM_SRCS += $(COMMON_DIR)/env/start.S 
 
 C_SRCS   += $(COMMON_DIR)/drivers/confreg_time.c
@@ -42,12 +45,18 @@ ASM_OBJS := $(ASM_SRCS:.S=.o)
 C_OBJS := $(C_SRCS:.c=.o)
 QEMU_ASM_OBJS := $(ASM_SRCS:.S=.out)
 QEMU_C_OBJS := $(C_SRCS:.c=.out)
+UBOOT_APP_ASM_OBJS := $(APP_ASM_SRCS:.S=.uboot.o)
+UBOOT_C_OBJS := $(C_SRCS:.c=.uboot.o)
+UBOOT_START_OBJ := $(UBOOT_START_SRC:.S=.uboot.o)
+UBOOT_LINK_OBJS := $(UBOOT_START_OBJ) $(UBOOT_APP_ASM_OBJS) $(UBOOT_C_OBJS)
+UBOOT_CFLAGS := $(CFLAGS) -Uhas_cache -Dhas_cache=0 -DBOOT_FROM_UBOOT=1
 
 LINK_OBJS += $(ASM_OBJS) $(C_OBJS)
 LINK_DEPS += $(LINKER_SCRIPT)
 QEMU_LINK_OBJS += $(QEMU_ASM_OBJS) $(QEMU_C_OBJS)
 
 CLEAN_OBJS += $(OBJDIR)/$(TARGET).elf $(LINK_OBJS) $(OBJDIR)/$(TARGET).s $(OBJDIR)/$(TARGET).bin $(OBJDIR)/convert $(OBJDIR)/axi_ram.coe $(OBJDIR)/axi_ram.mif $(OBJDIR)/rom.vlog
+CLEAN_OBJS += $(OBJDIR)/$(TARGET)_uboot.elf $(OBJDIR)/$(TARGET)_uboot.bin $(OBJDIR)/$(TARGET)_uboot.s $(UBOOT_LINK_OBJS)
 
 $(TARGET): $(LINK_OBJS) $(LINK_DEPS) convert Makefile
 	$(LA32R_GCC) $(CFLAGS) $(INCLUDES) $(LINK_OBJS) -o $(OBJDIR)/$@.elf $(LDFLAGS)
@@ -62,6 +71,24 @@ $(ASM_OBJS): %.o: %.S
 
 $(C_OBJS): %.o: %.c
 	$(LA32R_GCC) $(CFLAGS) $(INCLUDES) -c -o $@ $< 
+
+.PHONY: uboot
+uboot: $(OBJDIR)/$(TARGET)_uboot.elf
+
+$(OBJDIR)/$(TARGET)_uboot.elf: $(UBOOT_LINK_OBJS) $(UBOOT_LINKER_SCRIPT) Makefile
+	mkdir -p $(OBJDIR)/
+	$(LA32R_GCC) $(UBOOT_CFLAGS) $(INCLUDES) $(UBOOT_LINK_OBJS) -o $@ \
+		-T $(UBOOT_LINKER_SCRIPT) -Wl,--gc-sections -Wl,--check-sections \
+		-lc -lm -lg -lsemihost -lgcc -L$(PICOLIBC_DIR)/lib
+	$(LA32R_OBJCOPY) -O binary $@ $(OBJDIR)/$(TARGET)_uboot.bin
+	$(LA32R_OBJDUMP) --disassemble-all -S $@ > $(OBJDIR)/$(TARGET)_uboot.s
+	rm -f $(UBOOT_LINK_OBJS)
+
+$(UBOOT_START_OBJ) $(UBOOT_APP_ASM_OBJS): %.uboot.o: %.S
+	$(LA32R_GCC) $(UBOOT_CFLAGS) $(INCLUDES) -c -o $@ $<
+
+$(UBOOT_C_OBJS): %.uboot.o: %.c
+	$(LA32R_GCC) $(UBOOT_CFLAGS) $(INCLUDES) -c -o $@ $<
 
 convert: $(COMMON_DIR)/env/convert.c
 	mkdir -p $(OBJDIR)/

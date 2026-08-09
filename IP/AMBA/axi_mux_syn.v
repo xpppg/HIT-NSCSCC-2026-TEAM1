@@ -31,8 +31,8 @@ THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------------
 ------------------------------------------------------------------------------*/
 
-`define SLV_MUX_5
-`define SLV_MUX_NUM  5
+`define SLV_MUX_6
+`define SLV_MUX_NUM  6
 `include "config.h"
 module axi_slave_mux(
 spi_boot,
@@ -256,6 +256,43 @@ s4_rresp,
 s4_rlast,
 s4_rvalid,
 s4_rready,
+
+s5_awid,
+s5_awaddr,
+s5_awlen,
+s5_awsize,
+s5_awburst,
+s5_awlock,
+s5_awcache,
+s5_awprot,
+s5_awvalid,
+s5_awready,
+s5_wid,
+s5_wdata,
+s5_wstrb,
+s5_wlast,
+s5_wvalid,
+s5_wready,
+s5_bid,
+s5_bresp,
+s5_bvalid,
+s5_bready,
+s5_arid,
+s5_araddr,
+s5_arlen,
+s5_arsize,
+s5_arburst,
+s5_arlock,
+s5_arcache,
+s5_arprot,
+s5_arvalid,
+s5_arready,
+s5_rid,
+s5_rdata,
+s5_rresp,
+s5_rlast,
+s5_rvalid,
+s5_rready,
 
 axi_s_aresetn
 );
@@ -491,6 +528,43 @@ input                       s4_rlast;
 input                       s4_rvalid;
 output                      s4_rready;
 
+output [`LID         -1 :0] s5_awid;
+output [`Lawaddr     -1 :0] s5_awaddr;
+output [`Lawlen      -1 :0] s5_awlen;
+output [`Lawsize     -1 :0] s5_awsize;
+output [`Lawburst    -1 :0] s5_awburst;
+output [`Lawlock     -1 :0] s5_awlock;
+output [`Lawcache    -1 :0] s5_awcache;
+output [`Lawprot     -1 :0] s5_awprot;
+output                      s5_awvalid;
+input                       s5_awready;
+output [`LID         -1 :0] s5_wid;
+output [`Lwdata      -1 :0] s5_wdata;
+output [`Lwstrb      -1 :0] s5_wstrb;
+output                      s5_wlast;
+output                      s5_wvalid;
+input                       s5_wready;
+input  [`LID         -1 :0] s5_bid;
+input  [`Lbresp      -1 :0] s5_bresp;
+input                       s5_bvalid;
+output                      s5_bready;
+output [`LID         -1 :0] s5_arid;
+output [`Laraddr     -1 :0] s5_araddr;
+output [`Larlen      -1 :0] s5_arlen;
+output [`Larsize     -1 :0] s5_arsize;
+output [`Larburst    -1 :0] s5_arburst;
+output [`Larlock     -1 :0] s5_arlock;
+output [`Larcache    -1 :0] s5_arcache;
+output [`Larprot     -1 :0] s5_arprot;
+output                      s5_arvalid;
+input                       s5_arready;
+input  [`LID         -1 :0] s5_rid;
+input  [`Lrdata      -1 :0] s5_rdata;
+input  [`Lrresp      -1 :0] s5_rresp;
+input                       s5_rlast;
+input                       s5_rvalid;
+output                      s5_rready;
+
 wire                clk;
 wire                rst_n;
 
@@ -652,6 +726,32 @@ assign s4_arlock  = axi_s_arlock;
 assign s4_arcache = axi_s_arcache;
 assign s4_arprot  = axi_s_arprot;
 
+wire s5_awvalid          ;
+wire s5_wvalid           ;
+wire s5_bready           ;
+wire s5_arvalid          ;
+wire s5_rready           ;
+assign s5_awid    = axi_s_awid;
+assign s5_awaddr  = axi_s_awaddr;
+assign s5_awlen   = axi_s_awlen;
+assign s5_awsize  = axi_s_awsize;
+assign s5_awburst = axi_s_awburst;
+assign s5_awlock  = axi_s_awlock;
+assign s5_awcache = axi_s_awcache;
+assign s5_awprot  = axi_s_awprot;
+assign s5_wid     = axi_s_wid;
+assign s5_wdata   = axi_s_wdata;
+assign s5_wstrb   = axi_s_wstrb;
+assign s5_wlast   = axi_s_wlast;
+assign s5_arid    = axi_s_arid;
+assign s5_araddr  = axi_s_araddr;
+assign s5_arlen   = axi_s_arlen;
+assign s5_arsize  = axi_s_arsize;
+assign s5_arburst = axi_s_arburst;
+assign s5_arlock  = axi_s_arlock;
+assign s5_arcache = axi_s_arcache;
+assign s5_arprot  = axi_s_arprot;
+
 reg [`SLV_MUX_NUM-1:0] s_awvalid;
 reg [`SLV_MUX_NUM-1:0] s_wvalid ;
 reg [`SLV_MUX_NUM-1:0] s_bready ;
@@ -685,6 +785,11 @@ assign s4_wvalid           =        s_wvalid [4]  ;
 assign s4_bready           =        s_bready [4]  ;
 assign s4_arvalid          =        s_arvalid[4]  ;
 assign s4_rready           =        s_rready [4]  ;
+assign s5_awvalid          =        s_awvalid[5]  ;
+assign s5_wvalid           =        s_wvalid [5]  ;
+assign s5_bready           =        s_bready [5]  ;
+assign s5_arvalid          =        s_arvalid[5]  ;
+assign s5_rready           =        s_rready [5]  ;
 
 assign s_awready[0]  = s0_awready  ;
 assign s_wready[0]   = s0_wready   ;
@@ -742,6 +847,17 @@ assign s_rdata[4]    = s4_rdata    ;
 assign s_rresp[4]    = s4_rresp    ;
 assign s_rlast[4]    = s4_rlast    ;
 assign s_rvalid[4]   = s4_rvalid   ;
+assign s_awready[5]  = s5_awready  ;
+assign s_wready[5]   = s5_wready   ;
+assign s_bid[5]      = s5_bid      ;
+assign s_bresp[5]    = s5_bresp    ;
+assign s_bvalid[5]   = s5_bvalid   ;
+assign s_arready[5]  = s5_arready  ;
+assign s_rid[5]      = s5_rid      ;
+assign s_rdata[5]    = s5_rdata    ;
+assign s_rresp[5]    = s5_rresp    ;
+assign s_rlast[5]    = s5_rlast    ;
+assign s_rvalid[5]   = s5_rvalid   ;
 
 wire [4:0]BASE_ADDR [`SLV_MUX_NUM-1:0];
 wire [2:0]wr_sel_group_0;
@@ -755,9 +871,9 @@ wire [2:0]rd_valid_group_0;
 wire [2:0]rd_valid_group_1;
 
 assign bvalid_group_0 = s_bvalid[2:0];
-assign bvalid_group_1 = {1'b0,s_bvalid[4:3]};
+assign bvalid_group_1 = s_bvalid[5:3];
 assign rd_valid_group_0 = s_rvalid[2:0];
-assign rd_valid_group_1 = {1'b0,s_rvalid[4:3]};
+assign rd_valid_group_1 = s_rvalid[5:3];
 
 wire                wr_fifo_empty;
 wire                wr_fifo_full;
@@ -803,7 +919,7 @@ integer resp_int;
 always @(wr_resp_prog or wr_resp_sel  or wr_resp_sel_reg )
 begin
     for(resp_int= 0 ; resp_int< `SLV_MUX_NUM ;resp_int= resp_int+ 1)
-        wr_resp_s_hit [resp_int]  =  !wr_resp_prog && wr_resp_sel == resp_int|| wr_resp_prog && wr_resp_sel_reg == resp_int;
+        wr_resp_s_hit [resp_int]  =  !wr_resp_prog && wr_resp_sel == resp_int[2:0]|| wr_resp_prog && wr_resp_sel_reg == resp_int[2:0];
 end
 
 assign wr_sel_group_0=get_num(bvalid_group_0,wr_resp_pre_sel,2'h0); 
@@ -811,12 +927,12 @@ assign wr_sel_group_1=get_num(bvalid_group_1,wr_resp_pre_sel,2'h3);
 assign wr_resp_sel= ((wr_sel_group_0== 3'h7)  && (wr_sel_group_1== 3'h7) ) ? 3'h7:  
                     ((wr_sel_group_0!= 3'h7)  && (wr_sel_group_1== 3'h7) ) ?wr_sel_group_0:  
                     ((wr_sel_group_0== 3'h7)  && (wr_sel_group_1!= 3'h7) ) ?wr_sel_group_1:  
-                    (wr_resp_pre_sel > 2'h2) ? wr_sel_group_0 : wr_sel_group_1;
+                    (wr_resp_pre_sel > 3'h2) ? wr_sel_group_0 : wr_sel_group_1;
 
 integer axi_s_resp_int; 
 always @(*)
 begin
-            axi_s_bid       =8'h0;
+            axi_s_bid       ={`LID{1'b0}};
             axi_s_bresp     =2'h0;
             axi_s_bvalid    =1'h0;
     for(axi_s_resp_int= 0 ; axi_s_resp_int< `SLV_MUX_NUM ;axi_s_resp_int=axi_s_resp_int+ 1)
@@ -841,23 +957,27 @@ begin
         wr_addr_dir =  3'b0;
     for(w_addr_dir_int= 0 ; w_addr_dir_int< `SLV_MUX_NUM ;w_addr_dir_int= w_addr_dir_int+ 1)
         if(wr_addr_hit[w_addr_dir_int])
-        wr_addr_dir =w_addr_dir_int;
+        wr_addr_dir =w_addr_dir_int[2:0];
 end
 
 integer w_ad_int;
 always @(wr_fifo_empty or  wr_data_dir )
 begin
     for(w_ad_int = 0 ; w_ad_int < `SLV_MUX_NUM ;w_ad_int = w_ad_int + 1)
-        wr_data_s_hit[w_ad_int]  =  (!wr_fifo_empty && wr_data_dir == w_ad_int);
+        wr_data_s_hit[w_ad_int]  =  (!wr_fifo_empty && wr_data_dir == w_ad_int[2:0]);
 end
 
-assign wr_addr_hit[1] = axi_s_awaddr[31:20]==12'h1c0 ||
-                        axi_s_awaddr[31:16]==16'h1fe8;  //SPI
-assign wr_addr_hit[2] = axi_s_awaddr[31:16]==16'h1fe0 ||
-                        axi_s_awaddr[31:16]==16'h1fe7 ; //APB: uart and nand
-assign wr_addr_hit[3] = axi_s_awaddr[31:16]==16'h1fd0;  //CONF
-assign wr_addr_hit[4] = axi_s_awaddr[31:16]==16'h1ff0;  //MAC
-assign wr_addr_hit[0] = ~|wr_addr_hit[4:1];             //DDR3
+wire wr_hit_spi = axi_s_awaddr[31:20] == 12'h1c0 ||
+                  axi_s_awaddr[31:16] == 16'h1fe8;
+wire wr_hit_apb = axi_s_awaddr[31:16] == 16'h1fe0 ||
+                  axi_s_awaddr[31:16] == 16'h1fe7;
+wire wr_hit_conf = axi_s_awaddr[31:16] == 16'h1fd0;
+wire wr_hit_mac  = axi_s_awaddr[31:16] == 16'h1ff0;
+wire wr_hit_lcd  = axi_s_awaddr[31:16] == 16'h1fa0;
+assign wr_addr_hit = {wr_hit_lcd, wr_hit_mac, wr_hit_conf, wr_hit_apb,
+                      wr_hit_spi,
+                      ~(wr_hit_lcd | wr_hit_mac | wr_hit_conf | wr_hit_apb |
+                        wr_hit_spi)};
 
 nb_sync_fifo_mux wr_fifo
 (
@@ -943,12 +1063,17 @@ begin
         s_arvalid [rd_arvalid_int] = !rd_fifo_full && rd_addr_hit[rd_arvalid_int]  && axi_s_arvalid;
 end
 
-assign rd_addr_hit[1] = ((axi_s_araddr[31:16]) ==16'h1fe8) || ((axi_s_araddr[31:20])==12'h1c0);  //SPI
-assign rd_addr_hit[2] = (axi_s_araddr[31:16]) ==16'h1fe0 ||
-                        (axi_s_araddr[31:16]) ==16'h1fe7  ;//APB:uart and nand
-assign rd_addr_hit[3] = (axi_s_araddr[31:16]) ==16'h1fd0;  //CONF
-assign rd_addr_hit[4] = (axi_s_araddr[31:16]) == 16'h1ff0; //MAC
-assign rd_addr_hit[0] = ~|rd_addr_hit[4:1];                //DDR3
+wire rd_hit_spi = axi_s_araddr[31:16] == 16'h1fe8 ||
+                  axi_s_araddr[31:20] == 12'h1c0;
+wire rd_hit_apb = axi_s_araddr[31:16] == 16'h1fe0 ||
+                  axi_s_araddr[31:16] == 16'h1fe7;
+wire rd_hit_conf = axi_s_araddr[31:16] == 16'h1fd0;
+wire rd_hit_mac  = axi_s_araddr[31:16] == 16'h1ff0;
+wire rd_hit_lcd  = axi_s_araddr[31:16] == 16'h1fa0;
+assign rd_addr_hit = {rd_hit_lcd, rd_hit_mac, rd_hit_conf, rd_hit_apb,
+                      rd_hit_spi,
+                      ~(rd_hit_lcd | rd_hit_mac | rd_hit_conf | rd_hit_apb |
+                        rd_hit_spi)};
 
 integer rd_addr_dir_int;
 always @(rd_addr_hit)
@@ -956,21 +1081,21 @@ begin
         rd_addr_dir =  3'b0;
     for(rd_addr_dir_int= 0 ; rd_addr_dir_int< `SLV_MUX_NUM ;rd_addr_dir_int= rd_addr_dir_int+ 1)
         if(rd_addr_hit[rd_addr_dir_int])
-        rd_addr_dir =rd_addr_dir_int;
+        rd_addr_dir =rd_addr_dir_int[2:0];
 end
 
 integer   axi_rd_data_int; 
 always @(*)
 begin
-            axi_s_rid       =8'h0;
-            axi_s_rdata     =128'h0;
+            axi_s_rid       ={`LID{1'b0}};
+            axi_s_rdata     ={`Lrdata{1'b0}};
             axi_s_rresp     =2'h0;
             axi_s_rlast     =1'h0;
             axi_s_rvalid    =1'h0;
     for(axi_rd_data_int= 0 ; axi_rd_data_int< `SLV_MUX_NUM ;axi_rd_data_int=axi_rd_data_int+ 1)
             begin
             s_rready [axi_rd_data_int] = 1'b0;
-            if(rd_data_sel==axi_rd_data_int) begin
+            if(rd_data_sel==axi_rd_data_int[2:0]) begin
                 s_rready [axi_rd_data_int] = axi_s_rready;
                 axi_s_rid       =s_rid    [axi_rd_data_int];
                 axi_s_rdata     =s_rdata  [axi_rd_data_int];
@@ -1028,7 +1153,7 @@ end
 endfunction 
 endmodule
 
-`undef SLV_MUX_5
+`undef SLV_MUX_6
 `undef SLV_MUX_NUM
 
 module nb_sync_fifo_mux
@@ -1094,7 +1219,7 @@ integer i;
 always@(posedge clk) begin
   if(!rst_n)
     for(i=0;i<2;i=i+1)
-      fifo_ram[i] <= 2'b0;
+      fifo_ram[i] <= {FIFO_WIDTH{1'b0}};
   else if(shift_in && ~full)
     fifo_ram[mem_wr_pos] <= data_in;
 end

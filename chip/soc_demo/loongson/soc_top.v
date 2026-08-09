@@ -111,7 +111,16 @@ module soc_top(
     output        SPI_CLK,
     output        SPI_CS,
     inout         SPI_MISO,
-    inout         SPI_MOSI
+    inout         SPI_MOSI,
+
+    //------16-bit 8080 LCD interface------
+    output        lcd_cs_n,
+    output        lcd_wr_n,
+    output        lcd_rd_n,
+    output        lcd_rs,
+    output        lcd_rst_n,
+    inout  [15:0] lcd_db,
+    output        lcd_bl_ctr
 );
 wire        aclk;
 wire        aresetn;
@@ -302,6 +311,43 @@ wire [`Lrresp      -1 :0] mac_s_rresp;
 wire                      mac_s_rlast;
 wire                      mac_s_rvalid;
 wire                      mac_s_rready;
+
+wire [`LID         -1 :0] lcd_s_awid;
+wire [`Lawaddr     -1 :0] lcd_s_awaddr;
+wire [`Lawlen      -1 :0] lcd_s_awlen;
+wire [`Lawsize     -1 :0] lcd_s_awsize;
+wire [`Lawburst    -1 :0] lcd_s_awburst;
+wire [`Lawlock     -1 :0] lcd_s_awlock;
+wire [`Lawcache    -1 :0] lcd_s_awcache;
+wire [`Lawprot     -1 :0] lcd_s_awprot;
+wire                      lcd_s_awvalid;
+wire                      lcd_s_awready;
+wire [`LID         -1 :0] lcd_s_wid;
+wire [`Lwdata      -1 :0] lcd_s_wdata;
+wire [`Lwstrb      -1 :0] lcd_s_wstrb;
+wire                      lcd_s_wlast;
+wire                      lcd_s_wvalid;
+wire                      lcd_s_wready;
+wire [`LID         -1 :0] lcd_s_bid;
+wire [`Lbresp      -1 :0] lcd_s_bresp;
+wire                      lcd_s_bvalid;
+wire                      lcd_s_bready;
+wire [`LID         -1 :0] lcd_s_arid;
+wire [`Laraddr     -1 :0] lcd_s_araddr;
+wire [`Larlen      -1 :0] lcd_s_arlen;
+wire [`Larsize     -1 :0] lcd_s_arsize;
+wire [`Larburst    -1 :0] lcd_s_arburst;
+wire [`Larlock     -1 :0] lcd_s_arlock;
+wire [`Larcache    -1 :0] lcd_s_arcache;
+wire [`Larprot     -1 :0] lcd_s_arprot;
+wire                      lcd_s_arvalid;
+wire                      lcd_s_arready;
+wire [`LID         -1 :0] lcd_s_rid;
+wire [`Lrdata      -1 :0] lcd_s_rdata;
+wire [`Lrresp      -1 :0] lcd_s_rresp;
+wire                      lcd_s_rlast;
+wire                      lcd_s_rvalid;
+wire                      lcd_s_rready;
 
 wire [`LID         -1 :0] mac_m_awid;
 wire [`Lawaddr     -1 :0] mac_m_awaddr;
@@ -1216,6 +1262,43 @@ axi_slave_mux AXI_SLAVE_MUX
 .s4_rvalid         (mac_s_rvalid       ),
 .s4_rready         (mac_s_rready       ),
 
+.s5_awid           (lcd_s_awid         ),
+.s5_awaddr         (lcd_s_awaddr       ),
+.s5_awlen          (lcd_s_awlen        ),
+.s5_awsize         (lcd_s_awsize       ),
+.s5_awburst        (lcd_s_awburst      ),
+.s5_awlock         (lcd_s_awlock       ),
+.s5_awcache        (lcd_s_awcache      ),
+.s5_awprot         (lcd_s_awprot       ),
+.s5_awvalid        (lcd_s_awvalid      ),
+.s5_awready        (lcd_s_awready      ),
+.s5_wid            (lcd_s_wid          ),
+.s5_wdata          (lcd_s_wdata        ),
+.s5_wstrb          (lcd_s_wstrb        ),
+.s5_wlast          (lcd_s_wlast        ),
+.s5_wvalid         (lcd_s_wvalid       ),
+.s5_wready         (lcd_s_wready       ),
+.s5_bid            (lcd_s_bid          ),
+.s5_bresp          (lcd_s_bresp        ),
+.s5_bvalid         (lcd_s_bvalid       ),
+.s5_bready         (lcd_s_bready       ),
+.s5_arid           (lcd_s_arid         ),
+.s5_araddr         (lcd_s_araddr       ),
+.s5_arlen          (lcd_s_arlen        ),
+.s5_arsize         (lcd_s_arsize       ),
+.s5_arburst        (lcd_s_arburst      ),
+.s5_arlock         (lcd_s_arlock       ),
+.s5_arcache        (lcd_s_arcache      ),
+.s5_arprot         (lcd_s_arprot       ),
+.s5_arvalid        (lcd_s_arvalid      ),
+.s5_arready        (lcd_s_arready      ),
+.s5_rid            (lcd_s_rid          ),
+.s5_rdata          (lcd_s_rdata        ),
+.s5_rresp          (lcd_s_rresp        ),
+.s5_rlast          (lcd_s_rlast        ),
+.s5_rvalid         (lcd_s_rvalid       ),
+.s5_rready         (lcd_s_rready       ),
+
 .axi_s_aclk        (aclk                )
 );
 
@@ -1880,5 +1963,66 @@ axi2apb_misc APB_DEV
 
 .nand_int           (nand_int         )
 );
-endmodule
 
+// LCD controller: physical 0x1fa0_0000, normally accessed through the
+// uncached MIPS alias at 0xbfa0_0000.
+lcd_axi_controller #(
+    .AXI_ID_WIDTH   (`LID),
+    .AXI_ADDR_WIDTH (`Lawaddr),
+    .AXI_DATA_WIDTH (`Lwdata),
+    .AXI_LEN_WIDTH  (`Lawlen)
+) LCD (
+    .s_axi_aclk     (aclk          ),
+    .s_axi_aresetn  (aresetn       ),
+
+    .s_axi_awid     (lcd_s_awid    ),
+    .s_axi_awaddr   (lcd_s_awaddr  ),
+    .s_axi_awlen    (lcd_s_awlen   ),
+    .s_axi_awsize   (lcd_s_awsize  ),
+    .s_axi_awburst  (lcd_s_awburst ),
+    .s_axi_awlock   (lcd_s_awlock  ),
+    .s_axi_awcache  (lcd_s_awcache ),
+    .s_axi_awprot   (lcd_s_awprot  ),
+    .s_axi_awvalid  (lcd_s_awvalid ),
+    .s_axi_awready  (lcd_s_awready ),
+
+    .s_axi_wid      (lcd_s_wid     ),
+    .s_axi_wdata    (lcd_s_wdata   ),
+    .s_axi_wstrb    (lcd_s_wstrb   ),
+    .s_axi_wlast    (lcd_s_wlast   ),
+    .s_axi_wvalid   (lcd_s_wvalid  ),
+    .s_axi_wready   (lcd_s_wready  ),
+
+    .s_axi_bid      (lcd_s_bid     ),
+    .s_axi_bresp    (lcd_s_bresp   ),
+    .s_axi_bvalid   (lcd_s_bvalid  ),
+    .s_axi_bready   (lcd_s_bready  ),
+
+    .s_axi_arid     (lcd_s_arid    ),
+    .s_axi_araddr   (lcd_s_araddr  ),
+    .s_axi_arlen    (lcd_s_arlen   ),
+    .s_axi_arsize   (lcd_s_arsize  ),
+    .s_axi_arburst  (lcd_s_arburst ),
+    .s_axi_arlock   (lcd_s_arlock  ),
+    .s_axi_arcache  (lcd_s_arcache ),
+    .s_axi_arprot   (lcd_s_arprot  ),
+    .s_axi_arvalid  (lcd_s_arvalid ),
+    .s_axi_arready  (lcd_s_arready ),
+
+    .s_axi_rid      (lcd_s_rid     ),
+    .s_axi_rdata    (lcd_s_rdata   ),
+    .s_axi_rresp    (lcd_s_rresp   ),
+    .s_axi_rlast    (lcd_s_rlast   ),
+    .s_axi_rvalid   (lcd_s_rvalid  ),
+    .s_axi_rready   (lcd_s_rready  ),
+
+    .lcd_cs_n       (lcd_cs_n      ),
+    .lcd_wr_n       (lcd_wr_n      ),
+    .lcd_rd_n       (lcd_rd_n      ),
+    .lcd_rs         (lcd_rs        ),
+    .lcd_rst_n      (lcd_rst_n     ),
+    .lcd_db         (lcd_db        ),
+    .lcd_bl_ctr     (lcd_bl_ctr    )
+);
+
+endmodule
