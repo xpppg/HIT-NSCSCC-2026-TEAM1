@@ -349,5 +349,32 @@ Linux 第一阶段适配已经完成。AXI 复位后 `TOUCH_CTRL` 默认值改�
 内核配置启用了 `CONFIG_I2C`、`CONFIG_I2C_OCORES`、`CONFIG_I2C_CHARDEV` 和
 `CONFIG_INPUT_EVDEV`。无需 `i2c-tools` 的用户态验证程序位于
 `software/examples/i2c_touch_linux_probe`，它通过 `/dev/i2c-0` 的
-`I2C_RDWR` ioctl 读取 `0x8140`，预期打印 `Product ID: 1158`。下一阶段再添加
-Goodix 子节点、GT1158 型号表和 `intrpt[6]` 的 Linux 中断分发。
+`I2C_RDWR` ioctl 读取 `0x8140`，预期打印 `Product ID: 1158`；该项已经通过
+板端验证。
+
+Linux 第二阶段触摸输入适配也已完成。旧内核的 Goodix 型号表和设备树匹配表
+新增 `1158`，并按主线内核的做法使用 `gt1x_chip_data`。`i2c@1fa10000` 下增加
+`touchscreen@14`，设置 CPU 中断号 8、宽 480、高 800。内核配置启用了
+`CONFIG_INPUT_TOUCHSCREEN` 和 `CONFIG_TOUCHSCREEN_GOODIX`。
+
+SoC 的 `intrpt[6]` 对应 LoongArch `ECFGF_IP6`/CPU hwirq 8。
+`arch/loongarch/loongson32/irq.c` 现在分发该中断，并在 Goodix handler 注册后
+由通用 IRQ 层使能，避免启动早期的未处理触摸中断。由于 Goodix 使用
+`IRQF_ONESHOT` 线程处理，CPU irqchip 为 hwirq 8 单独采用电平流处理，在触摸
+线程完成 I2C 读取并清除 `0x814e` 状态前保持该路中断屏蔽，避免低有效触摸
+INT 经硬件反相后形成重复中断风暴。其他已有 CPU 中断仍使用原处理方式。
+
+无需安装 `evtest` 的事件查看程序位于 `software/examples/touch_event_test`。
+运行时读取 `/dev/input/eventX`，打印多点触摸槽、跟踪 ID 和 X/Y 坐标；
+`TRACKING_ID = -1` 表示手指抬起。
+
+现有 `software/lvgl_audio_player_linux` 已接入 `/dev/input/event0`。应用使用
+非阻塞 evdev 读取并把内核上报的 `ABS_X/ABS_Y` 范围映射到 framebuffer
+分辨率，然后注册为 LVGL pointer 输入设备。暂停/继续、下一首、菜单、返回及
+播放列表选曲均已连接 `LV_EVENT_CLICKED`；音频 I2S 输出仍保留为空。可用
+`--input /dev/input/eventX` 指定不同的 Goodix 事件节点。
+
+触摸读取以 `SYN_REPORT` 为边界逐帧提交给 LVGL，不能一次清空 evdev 队列后
+只提交最终状态。后者会在 LCD 刷新期间积累了完整快速点击时，把同一批中的
+按下和抬起合并成 `RELEASED`，导致偶发不响应。逐帧读取会保留
+`PRESSED -> RELEASED` 状态转换，并通过 `continue_reading` 继续处理积压帧。
