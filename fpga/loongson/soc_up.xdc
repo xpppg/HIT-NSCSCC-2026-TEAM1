@@ -238,3 +238,21 @@ set_property IOSTANDARD LVCMOS33 [get_ports lcd_wr_n]
 set_property IOSTANDARD LVCMOS33 [get_ports lcd_rd_n]
 set_property IOSTANDARD LVCMOS33 [get_ports lcd_bl_ctr]
 set_property IOSTANDARD LVCMOS33 [get_ports {lcd_db[*]}]
+
+# ALIENTEK 4.3-inch capacitive touch interface on LCD1 connector
+# Pin 30 T_MOSI/SDA, pin 31 T_PEN/INT, pin 33 T_CS/RST#, pin 34 T_CLK/SCL
+set_property PACKAGE_PIN J24 [get_ports touch_sda]
+set_property PACKAGE_PIN H21 [get_ports touch_scl]
+set_property PACKAGE_PIN L19 [get_ports touch_int]
+set_property PACKAGE_PIN G24 [get_ports touch_rst_n]
+
+set_property IOSTANDARD LVCMOS33 [get_ports touch_sda]
+set_property IOSTANDARD LVCMOS33 [get_ports touch_scl]
+set_property IOSTANDARD LVCMOS33 [get_ports touch_int]
+set_property IOSTANDARD LVCMOS33 [get_ports touch_rst_n]
+
+# I2C is open drain.  The LCD module normally provides external pull-ups;
+# weak internal pull-ups keep the inputs defined when the module is absent.
+set_property PULLUP true [get_ports touch_sda]
+set_property PULLUP true [get_ports touch_scl]
+set_property PULLUP true [get_ports touch_int]

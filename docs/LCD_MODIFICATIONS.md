@@ -280,8 +280,9 @@ Linux 驱动已切换到硬件 DMA 刷新。原 `vzalloc()` shadow framebuffer �
 LCD 窗口，然后依次写 `DMA_ADDR`、`DMA_LEN` 并轮询 `DMA_STAT`。这种设计不
 依赖当前未启用的 CMA，也避免把物理不连续的 vmalloc 页面直接交给硬件。
 
-当前版本使用轮询而非 DMA 完成中断。SoC 把 DMA 接到第五个外部中断输入，但
-`arch/loongarch/loongson32/irq.c` 目前只使能并分发前四个外部输入，因此该线
+当前版本使用轮询而非 DMA 完成中断。LoongArch `core_top` 的 `intrpt` 实际为
+8 位，SoC 把通用 DMA 与 LCD DMA 共同接到 `intrpt[4]`。但当前 Linux 的
+`arch/loongarch/loongson32/irq.c` 仍只使能并分发前四个外部输入，因此该线
 在 Linux 下保持屏蔽。若以后改为中断完成，需要同时扩展体系结构中断分发、
 设备树中断号和驱动 IRQ handler，不能只在 LCD 节点增加 `interrupts` 属性。
 
@@ -295,3 +296,58 @@ LCD 窗口，然后依次写 `DMA_ADDR`、`DMA_LEN` 并轮询 `DMA_STAT`。这�
 4. 检查 `dmesg` 中没有 `LCD framebuffer flush timed out` 或 DMA error；
 5. 用逻辑分析仪确认 DMA 刷新时 `CS_N`、`WR_N`、`RS` 和数据总线连续输出；
 6. 稳定后再评估是否需要扩展 Linux IP4 中断支持，将轮询改为完成中断。
+
+## 13. 独立 I2C 触摸控制器
+
+为扫描 ALIENTEK 4.3 英寸 LCD 模块上的 Goodix 电容触摸芯片，SoC 增加了一个
+独立的 OpenCores I2C Master，物理地址为 `0x1fa1_0000`。采用的是 Richard
+Herveille 的 I2C Master RTL；上游 RTL 原样保存在 `IP/I2C/opencores`，原始
+版权与再分发声明均予以保留。项目新增的 `IP/I2C/axi_i2c_ocores.v` 负责把
+AXI3 访问转换为该控制器的 8 位 Wishbone 寄存器访问。
+
+CPU 侧使用 32 位、4 字节步长访问寄存器：
+
+| 地址偏移 | 寄存器 |
+| --- | --- |
+| `0x00` | 预分频低 8 位 |
+| `0x04` | 预分频高 8 位 |
+| `0x08` | 控制寄存器 |
+| `0x0c` | 发送/接收数据 |
+| `0x10` | 命令/状态寄存器 |
+| `0x20` | 触摸控制：bit 0 为 `RESET_N`，bit 1 拉低 `INT` |
+| `0x24` | 线路状态：`INT/SCL/SDA/RESET_N` |
+
+33 MHz 外设时钟下，100 kHz I2C 的预分频值为 65（`0x0041`）。SCL、SDA 和
+触摸 INT 均按开漏方式使用；XDC 将它们分别连接到 H21、J24 和 L19，触摸复位
+连接到 G24。AXI 从设备复用器由 6 路扩展到 7 路，并把 `0x1fa1_xxxx` 解码到
+新增的第 7 路从设备。
+
+`core_top.intrpt` 已按实际接口改为完整的 8 位连接。当前中断映射如下：
+
+| 位 | 来源 |
+| --- | --- |
+| 0 | MAC |
+| 1 | UART0 |
+| 2 | SPI |
+| 3 | NAND |
+| 4 | 通用 DMA 或 LCD DMA |
+| 5 | OpenCores I2C 控制器 |
+| 6 | Goodix 触摸事件中断（低有效信号反相后接入） |
+| 7 | 保留 |
+
+裸机扫描程序位于 `software/examples/i2c_touch_probe`。执行 `make uboot` 后，
+通过 TFTP 下载 `obj/i2c_touch_probe_uboot.elf` 并使用 `bootelf` 启动。程序会
+依次执行 Goodix 的复位/地址选择时序，扫描 `0x5d` 与 `0x14`，然后读取
+`0x8140` 的 4 字节产品 ID。实机确认触摸芯片位于 `0x14`，产品 ID 为 `1158`。
+
+Linux 第一阶段适配已经完成。AXI 复位后 `TOUCH_CTRL` 默认值改为 `0x01`，即
+释放 RESET_N、释放开漏 INT，使模块自动选择已验证的 `0x14` 地址。设备树增加
+了不带中断属性的 `i2c@1fa10000` 节点，因此当前 `i2c-ocores` 驱动采用轮询
+传输。节点设置 `reg-io-width = <4>`、`reg-shift = <2>`、33 MHz 输入时钟及
+100 kHz 总线频率。
+
+内核配置启用了 `CONFIG_I2C`、`CONFIG_I2C_OCORES`、`CONFIG_I2C_CHARDEV` 和
+`CONFIG_INPUT_EVDEV`。无需 `i2c-tools` 的用户态验证程序位于
+`software/examples/i2c_touch_linux_probe`，它通过 `/dev/i2c-0` 的
+`I2C_RDWR` ioctl 读取 `0x8140`，预期打印 `Product ID: 1158`。下一阶段再添加
+Goodix 子节点、GT1158 型号表和 `intrpt[6]` 的 Linux 中断分发。

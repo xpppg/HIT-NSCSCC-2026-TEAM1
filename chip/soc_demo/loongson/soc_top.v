@@ -120,7 +120,13 @@ module soc_top(
     output        lcd_rs,
     output        lcd_rst_n,
     inout  [15:0] lcd_db,
-    output        lcd_bl_ctr
+    output        lcd_bl_ctr,
+
+    //------ALIENTEK capacitive touch------
+    inout         touch_scl,
+    inout         touch_sda,
+    inout         touch_int,
+    output        touch_rst_n
 );
 wire        aclk;
 wire        aresetn;
@@ -348,6 +354,45 @@ wire [`Lrresp      -1 :0] lcd_s_rresp;
 wire                      lcd_s_rlast;
 wire                      lcd_s_rvalid;
 wire                      lcd_s_rready;
+
+wire [`LID         -1 :0] i2c_s_awid;
+wire [`Lawaddr     -1 :0] i2c_s_awaddr;
+wire [`Lawlen      -1 :0] i2c_s_awlen;
+wire [`Lawsize     -1 :0] i2c_s_awsize;
+wire [`Lawburst    -1 :0] i2c_s_awburst;
+wire [`Lawlock     -1 :0] i2c_s_awlock;
+wire [`Lawcache    -1 :0] i2c_s_awcache;
+wire [`Lawprot     -1 :0] i2c_s_awprot;
+wire                      i2c_s_awvalid;
+wire                      i2c_s_awready;
+wire [`LID         -1 :0] i2c_s_wid;
+wire [`Lwdata      -1 :0] i2c_s_wdata;
+wire [`Lwstrb      -1 :0] i2c_s_wstrb;
+wire                      i2c_s_wlast;
+wire                      i2c_s_wvalid;
+wire                      i2c_s_wready;
+wire [`LID         -1 :0] i2c_s_bid;
+wire [`Lbresp      -1 :0] i2c_s_bresp;
+wire                      i2c_s_bvalid;
+wire                      i2c_s_bready;
+wire [`LID         -1 :0] i2c_s_arid;
+wire [`Laraddr     -1 :0] i2c_s_araddr;
+wire [`Larlen      -1 :0] i2c_s_arlen;
+wire [`Larsize     -1 :0] i2c_s_arsize;
+wire [`Larburst    -1 :0] i2c_s_arburst;
+wire [`Larlock     -1 :0] i2c_s_arlock;
+wire [`Larcache    -1 :0] i2c_s_arcache;
+wire [`Larprot     -1 :0] i2c_s_arprot;
+wire                      i2c_s_arvalid;
+wire                      i2c_s_arready;
+wire [`LID         -1 :0] i2c_s_rid;
+wire [`Lrdata      -1 :0] i2c_s_rdata;
+wire [`Lrresp      -1 :0] i2c_s_rresp;
+wire                      i2c_s_rlast;
+wire                      i2c_s_rvalid;
+wire                      i2c_s_rready;
+wire                      i2c_irq;
+wire                      touch_irq;
 
 wire [`LID         -1 :0] mac_m_awid;
 wire [`Lawaddr     -1 :0] mac_m_awaddr;
@@ -657,12 +702,15 @@ assign     uart0_ri_i  = UART_RI ;
 
 //interrupt
 wire mac_int;
-wire [5:0] int_out;
-wire [5:0] int_n_i;
-// The CPU exposes only five interrupt inputs.  The original general-purpose
-// DMA has no Linux driver, so the LCD DMA shares that interrupt input; each
-// controller has an independent status/acknowledge register.
-assign int_out = {1'b0,(dma_int | lcd_dma_irq),nand_int,spi_inta_o,uart0_int,mac_int};
+wire [7:0] int_out;
+wire [7:0] int_n_i;
+// LoongArch core_top exposes all eight hardware interrupt inputs.  Goodix INT
+// is an active-low, open-drain signal and is converted to an active-high CPU
+// interrupt here.  The general-purpose DMA and LCD DMA share bit 4; each has
+// an independent status/acknowledge register.
+assign touch_irq = ~touch_int;
+assign int_out = {1'b0,touch_irq,i2c_irq,(dma_int | lcd_dma_irq),
+                  nand_int,spi_inta_o,uart0_int,mac_int};
 assign int_n_i = ~int_out;
 
 reg cpu_aresetn_1;
@@ -790,7 +838,7 @@ debug_sram u_debug_sram(
 // cpu
 core_top cpu_mid(
   .aclk             (cpu_clk),
-  .intrpt           ({3'b0, int_out[4:0]}),  //232 only 5bit
+  .intrpt           (int_out),
   //.nmi              (1'b1),
 
   .aresetn          (cpu_aresetn  ),
@@ -1320,6 +1368,43 @@ axi_slave_mux AXI_SLAVE_MUX
 .s5_rlast          (lcd_s_rlast        ),
 .s5_rvalid         (lcd_s_rvalid       ),
 .s5_rready         (lcd_s_rready       ),
+
+.s6_awid           (i2c_s_awid         ),
+.s6_awaddr         (i2c_s_awaddr       ),
+.s6_awlen          (i2c_s_awlen        ),
+.s6_awsize         (i2c_s_awsize       ),
+.s6_awburst        (i2c_s_awburst      ),
+.s6_awlock         (i2c_s_awlock       ),
+.s6_awcache        (i2c_s_awcache      ),
+.s6_awprot         (i2c_s_awprot       ),
+.s6_awvalid        (i2c_s_awvalid      ),
+.s6_awready        (i2c_s_awready      ),
+.s6_wid            (i2c_s_wid          ),
+.s6_wdata          (i2c_s_wdata        ),
+.s6_wstrb          (i2c_s_wstrb        ),
+.s6_wlast          (i2c_s_wlast        ),
+.s6_wvalid         (i2c_s_wvalid       ),
+.s6_wready         (i2c_s_wready       ),
+.s6_bid            (i2c_s_bid          ),
+.s6_bresp          (i2c_s_bresp        ),
+.s6_bvalid         (i2c_s_bvalid       ),
+.s6_bready         (i2c_s_bready       ),
+.s6_arid           (i2c_s_arid         ),
+.s6_araddr         (i2c_s_araddr       ),
+.s6_arlen          (i2c_s_arlen        ),
+.s6_arsize         (i2c_s_arsize       ),
+.s6_arburst        (i2c_s_arburst      ),
+.s6_arlock         (i2c_s_arlock       ),
+.s6_arcache        (i2c_s_arcache      ),
+.s6_arprot         (i2c_s_arprot       ),
+.s6_arvalid        (i2c_s_arvalid      ),
+.s6_arready        (i2c_s_arready      ),
+.s6_rid            (i2c_s_rid          ),
+.s6_rdata          (i2c_s_rdata        ),
+.s6_rresp          (i2c_s_rresp        ),
+.s6_rlast          (i2c_s_rlast        ),
+.s6_rvalid         (i2c_s_rvalid       ),
+.s6_rready         (i2c_s_rready       ),
 
 .axi_s_aclk        (aclk                )
 );
@@ -2106,6 +2191,59 @@ lcd_axi_controller #(
     .lcd_rst_n      (lcd_rst_n     ),
     .lcd_db         (lcd_db        ),
     .lcd_bl_ctr     (lcd_bl_ctr    )
+);
+
+// OpenCores I2C master: physical 0x1fa1_0000.  Its registers are presented
+// with a four-byte stride for direct use by the Linux i2c-ocores driver.
+axi_i2c_ocores #(
+    .AXI_ID_WIDTH   (`LID),
+    .AXI_ADDR_WIDTH (`Lawaddr),
+    .AXI_DATA_WIDTH (`Lwdata),
+    .AXI_LEN_WIDTH  (`Lawlen)
+) TOUCH_I2C (
+    .s_axi_aclk     (aclk),
+    .s_axi_aresetn  (aresetn),
+    .s_axi_awid     (i2c_s_awid),
+    .s_axi_awaddr   (i2c_s_awaddr),
+    .s_axi_awlen    (i2c_s_awlen),
+    .s_axi_awsize   (i2c_s_awsize),
+    .s_axi_awburst  (i2c_s_awburst),
+    .s_axi_awlock   (i2c_s_awlock),
+    .s_axi_awcache  (i2c_s_awcache),
+    .s_axi_awprot   (i2c_s_awprot),
+    .s_axi_awvalid  (i2c_s_awvalid),
+    .s_axi_awready  (i2c_s_awready),
+    .s_axi_wid      (i2c_s_wid),
+    .s_axi_wdata    (i2c_s_wdata),
+    .s_axi_wstrb    (i2c_s_wstrb),
+    .s_axi_wlast    (i2c_s_wlast),
+    .s_axi_wvalid   (i2c_s_wvalid),
+    .s_axi_wready   (i2c_s_wready),
+    .s_axi_bid      (i2c_s_bid),
+    .s_axi_bresp    (i2c_s_bresp),
+    .s_axi_bvalid   (i2c_s_bvalid),
+    .s_axi_bready   (i2c_s_bready),
+    .s_axi_arid     (i2c_s_arid),
+    .s_axi_araddr   (i2c_s_araddr),
+    .s_axi_arlen    (i2c_s_arlen),
+    .s_axi_arsize   (i2c_s_arsize),
+    .s_axi_arburst  (i2c_s_arburst),
+    .s_axi_arlock   (i2c_s_arlock),
+    .s_axi_arcache  (i2c_s_arcache),
+    .s_axi_arprot   (i2c_s_arprot),
+    .s_axi_arvalid  (i2c_s_arvalid),
+    .s_axi_arready  (i2c_s_arready),
+    .s_axi_rid      (i2c_s_rid),
+    .s_axi_rdata    (i2c_s_rdata),
+    .s_axi_rresp    (i2c_s_rresp),
+    .s_axi_rlast    (i2c_s_rlast),
+    .s_axi_rvalid   (i2c_s_rvalid),
+    .s_axi_rready   (i2c_s_rready),
+    .i2c_irq        (i2c_irq),
+    .touch_scl      (touch_scl),
+    .touch_sda      (touch_sda),
+    .touch_int      (touch_int),
+    .touch_rst_n    (touch_rst_n)
 );
 
 endmodule

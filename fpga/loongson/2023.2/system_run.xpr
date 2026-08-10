@@ -196,6 +196,55 @@
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
+      <File Path="$PPRDIR/../../../IP/I2C/opencores/timescale.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../../../IP/I2C/opencores/timescale.v"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PPRDIR/../../../IP/I2C/opencores/i2c_master_defines.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../../../IP/I2C/opencores/i2c_master_defines.v"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PPRDIR/../../../IP/I2C/opencores/i2c_master_bit_ctrl.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../../../IP/I2C/opencores/i2c_master_bit_ctrl.v"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PPRDIR/../../../IP/I2C/opencores/i2c_master_byte_ctrl.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../../../IP/I2C/opencores/i2c_master_byte_ctrl.v"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PPRDIR/../../../IP/I2C/opencores/i2c_master_top.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../../../IP/I2C/opencores/i2c_master_top.v"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PPRDIR/../../../IP/I2C/axi_i2c_ocores.v">
+        <FileInfo>
+          <Attr Name="ImportPath" Val="$PPRDIR/../../../IP/I2C/axi_i2c_ocores.v"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+
       <File Path="$PPRDIR/../../../IP/MAC/utility.v">
         <FileInfo>
           <Attr Name="ImportPath" Val="$PPRDIR/../../../IP/MAC/utility.v"/>
