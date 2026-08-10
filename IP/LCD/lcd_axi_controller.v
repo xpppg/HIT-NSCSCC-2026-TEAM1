@@ -14,6 +14,11 @@
 //               A zero timing field is treated as one clock cycle.
 //   0x10 CMD     enqueue s_axi_wdata[15:0] with lcd_rs=0
 //   0x14 DATA    enqueue s_axi_wdata[15:0] with lcd_rs=1
+//   0x18 DMA_ADDR source framebuffer physical address (64-bit aligned)
+//   0x1c DMA_LEN  transfer length in bytes; writing starts one transfer
+//                 (non-zero and 64-bit aligned)
+//   0x20 DMA_STAT [0] busy, [1] done, [2] AXI/configuration error,
+//                 [3] interrupt pending.  Any write acknowledges done/IRQ.
 //
 // A burst beginning at DATA is treated as a stream: every write beat is
 // enqueued as LCD data even though an AXI INCR burst conceptually advances the
@@ -69,6 +74,26 @@ module lcd_axi_controller #(
     output wire                         s_axi_rvalid,
     input  wire                         s_axi_rready,
 
+    // Read-only AXI master used to fetch RGB565 pixels from DDR.
+    output wire [3:0]                   m_axi_arid,
+    output wire [31:0]                  m_axi_araddr,
+    output wire [3:0]                   m_axi_arlen,
+    output wire [2:0]                   m_axi_arsize,
+    output wire [1:0]                   m_axi_arburst,
+    output wire [1:0]                   m_axi_arlock,
+    output wire [3:0]                   m_axi_arcache,
+    output wire [2:0]                   m_axi_arprot,
+    output wire                         m_axi_arvalid,
+    input  wire                         m_axi_arready,
+    input  wire [3:0]                   m_axi_rid,
+    input  wire [63:0]                  m_axi_rdata,
+    input  wire [1:0]                   m_axi_rresp,
+    input  wire                         m_axi_rlast,
+    input  wire                         m_axi_rvalid,
+    output wire                         m_axi_rready,
+
+    output wire                         dma_irq,
+
     output wire                         lcd_cs_n,
     output wire                         lcd_wr_n,
     output wire                         lcd_rd_n,
@@ -83,6 +108,9 @@ module lcd_axi_controller #(
     localparam [15:0] ADDR_TIMING = 16'h0008;
     localparam [15:0] ADDR_CMD    = 16'h0010;
     localparam [15:0] ADDR_DATA   = 16'h0014;
+    localparam [15:0] ADDR_DMA_ADDR = 16'h0018;
+    localparam [15:0] ADDR_DMA_LEN  = 16'h001c;
+    localparam [15:0] ADDR_DMA_STAT = 16'h0020;
 
     localparam [1:0] AXI_RESP_OKAY   = 2'b00;
     localparam [1:0] AXI_RESP_SLVERR = 2'b10;
@@ -92,10 +120,26 @@ module lcd_axi_controller #(
     reg [31:0] ctrl_reg;
     reg [31:0] timing_reg;
     reg        soft_reset_pulse;
+    reg [31:0] dma_addr_reg;
+    reg [31:0] dma_length_reg;
+    reg        dma_start_pulse;
+    reg        dma_ack_pulse;
+
+    wire       dma_busy;
+    wire       dma_done;
+    wire       dma_error;
+    wire       dma_pixel_valid;
+    wire       dma_pixel_ready;
+    wire [15:0] dma_pixel_data;
+    // An accepted AXI burst cannot be cancelled.  Ignore the software FIFO
+    // reset while DMA is active; the system reset still resets both sides.
+    wire       lcd_soft_reset_pulse = soft_reset_pulse && !dma_busy;
 
     wire [16:0] fifo_din;
     wire [16:0] fifo_dout;
     wire        fifo_wr_en;
+    wire        cpu_fifo_wr_en;
+    wire        dma_fifo_wr_en;
     wire        fifo_rd_en;
     wire        fifo_full;
     wire        fifo_empty;
@@ -128,14 +172,19 @@ module lcd_axi_controller #(
 
     assign s_axi_awready = (wr_state == W_IDLE);
     assign s_axi_wready  = (wr_state == W_DATA) &&
-                           (!wr_fifo_target || !fifo_full);
+                           (!wr_fifo_target || (!fifo_full && !dma_busy));
     assign s_axi_bid     = wr_id;
     assign s_axi_bresp   = wr_resp;
     assign s_axi_bvalid  = (wr_state == W_RESP);
 
-    assign fifo_wr_en = wr_beat && wr_protocol_ok && wr_fifo_target &&
-                        (&s_axi_wstrb[1:0]);
-    assign fifo_din = {(wr_offset == ADDR_DATA), s_axi_wdata[15:0]};
+    assign cpu_fifo_wr_en = wr_beat && wr_protocol_ok && wr_fifo_target &&
+                            (&s_axi_wstrb[1:0]);
+    assign dma_fifo_wr_en = dma_pixel_valid && dma_pixel_ready;
+    assign fifo_wr_en = cpu_fifo_wr_en || dma_fifo_wr_en;
+    assign fifo_din = dma_fifo_wr_en ? {1'b1, dma_pixel_data} :
+                                      {(wr_offset == ADDR_DATA),
+                                       s_axi_wdata[15:0]};
+    assign dma_pixel_ready = !fifo_full;
 
     function [31:0] apply_wstrb;
         input [31:0] old_value;
@@ -164,8 +213,14 @@ module lcd_axi_controller #(
             ctrl_reg         <= 32'h0000_0000;
             timing_reg       <= 32'h0001_0101;
             soft_reset_pulse <= 1'b0;
+            dma_addr_reg     <= 32'h0000_0000;
+            dma_length_reg   <= 32'h0000_0000;
+            dma_start_pulse  <= 1'b0;
+            dma_ack_pulse    <= 1'b0;
         end else begin
             soft_reset_pulse <= 1'b0;
+            dma_start_pulse  <= 1'b0;
+            dma_ack_pulse    <= 1'b0;
 
             case (wr_state)
                 W_IDLE: begin
@@ -193,7 +248,10 @@ module lcd_axi_controller #(
                             ((wr_offset != ADDR_CTRL) &&
                              (wr_offset != ADDR_TIMING) &&
                              (wr_offset != ADDR_CMD) &&
-                             (wr_offset != ADDR_DATA)))
+                             (wr_offset != ADDR_DATA) &&
+                             (wr_offset != ADDR_DMA_ADDR) &&
+                             (wr_offset != ADDR_DMA_LEN) &&
+                             (wr_offset != ADDR_DMA_STAT)))
                             wr_resp <= AXI_RESP_SLVERR;
 
                         if (wr_protocol_ok) begin
@@ -210,6 +268,19 @@ module lcd_axi_controller #(
                                     timing_reg <= apply_wstrb(timing_reg,
                                                               s_axi_wdata,
                                                               s_axi_wstrb);
+                                ADDR_DMA_ADDR:
+                                    dma_addr_reg <= apply_wstrb(dma_addr_reg,
+                                                                s_axi_wdata,
+                                                                s_axi_wstrb);
+                                ADDR_DMA_LEN: begin
+                                    dma_length_reg <=
+                                        apply_wstrb(dma_length_reg,
+                                                    s_axi_wdata,
+                                                    s_axi_wstrb);
+                                    dma_start_pulse <= 1'b1;
+                                end
+                                ADDR_DMA_STAT:
+                                    dma_ack_pulse <= 1'b1;
                                 default: begin
                                 end
                             endcase
@@ -252,10 +323,13 @@ module lcd_axi_controller #(
     reg [1:0]                   rd_resp;
 
     wire lcd_busy;
+    wire [31:0] dma_status_word = {28'b0, dma_irq, dma_error,
+                                   dma_done, dma_busy};
     wire [31:0] status_word = {
         15'b0,
         fifo_count[8:0],
-        3'b0,
+        2'b0,
+        dma_busy,
         ctrl_reg[2],
         ctrl_reg[1],
         lcd_busy,
@@ -269,7 +343,10 @@ module lcd_axi_controller #(
             case (address)
                 ADDR_CTRL,
                 ADDR_STATUS,
-                ADDR_TIMING: readable_offset = 1'b1;
+                ADDR_TIMING,
+                ADDR_DMA_ADDR,
+                ADDR_DMA_LEN,
+                ADDR_DMA_STAT: readable_offset = 1'b1;
                 default:     readable_offset = 1'b0;
             endcase
         end
@@ -282,6 +359,9 @@ module lcd_axi_controller #(
                 ADDR_CTRL:   read_register = ctrl_reg;
                 ADDR_STATUS: read_register = status_word;
                 ADDR_TIMING: read_register = timing_reg;
+                ADDR_DMA_ADDR: read_register = dma_addr_reg;
+                ADDR_DMA_LEN:  read_register = dma_length_reg;
+                ADDR_DMA_STAT: read_register = dma_status_word;
                 default:     read_register = 32'h0000_0000;
             endcase
         end
@@ -345,6 +425,44 @@ module lcd_axi_controller #(
                                    s_axi_arlock, s_axi_arcache, s_axi_arprot};
 
     // ------------------------------------------------------------------
+    // Framebuffer DMA reader.  It deliberately has only an AXI read
+    // channel: pixels are fetched from DDR in 16-beat bursts and serialized
+    // into the existing LCD command FIFO as RGB565 DATA entries.
+    // ------------------------------------------------------------------
+    lcd_dma_reader u_dma_reader (
+        .clk          (s_axi_aclk),
+        .resetn       (s_axi_aresetn),
+        .clear        (lcd_soft_reset_pulse),
+        .start        (dma_start_pulse),
+        .ack          (dma_ack_pulse),
+        .base_addr    (dma_addr_reg),
+        .byte_length  (dma_length_reg),
+        .busy         (dma_busy),
+        .done         (dma_done),
+        .error        (dma_error),
+        .irq          (dma_irq),
+        .pixel_valid  (dma_pixel_valid),
+        .pixel_ready  (dma_pixel_ready),
+        .pixel_data   (dma_pixel_data),
+        .m_axi_arid   (m_axi_arid),
+        .m_axi_araddr (m_axi_araddr),
+        .m_axi_arlen  (m_axi_arlen),
+        .m_axi_arsize (m_axi_arsize),
+        .m_axi_arburst(m_axi_arburst),
+        .m_axi_arlock (m_axi_arlock),
+        .m_axi_arcache(m_axi_arcache),
+        .m_axi_arprot (m_axi_arprot),
+        .m_axi_arvalid(m_axi_arvalid),
+        .m_axi_arready(m_axi_arready),
+        .m_axi_rid    (m_axi_rid),
+        .m_axi_rdata  (m_axi_rdata),
+        .m_axi_rresp  (m_axi_rresp),
+        .m_axi_rlast  (m_axi_rlast),
+        .m_axi_rvalid (m_axi_rvalid),
+        .m_axi_rready (m_axi_rready)
+    );
+
+    // ------------------------------------------------------------------
     // LCD command FIFO
     // ------------------------------------------------------------------
     lcd_sync_fifo #(
@@ -353,7 +471,7 @@ module lcd_axi_controller #(
     ) u_command_fifo (
         .clk   (s_axi_aclk),
         .resetn(s_axi_aresetn),
-        .clear (soft_reset_pulse),
+        .clear (lcd_soft_reset_pulse),
         .wr_en (fifo_wr_en),
         .din   (fifo_din),
         .rd_en (fifo_rd_en),
@@ -388,11 +506,11 @@ module lcd_axi_controller #(
                               8'd1 : timing_reg[23:16];
 
     assign fifo_rd_en = (lcd_state == LCD_IDLE) && !fifo_empty &&
-                        !soft_reset_pulse;
+                        !lcd_soft_reset_pulse;
     assign lcd_busy = (lcd_state != LCD_IDLE) || !fifo_empty;
 
     always @(posedge s_axi_aclk or negedge s_axi_aresetn) begin
-        if (!s_axi_aresetn || soft_reset_pulse) begin
+        if (!s_axi_aresetn || lcd_soft_reset_pulse) begin
             lcd_state    <= LCD_IDLE;
             lcd_timer    <= 8'd0;
             lcd_cs_n_reg <= 1'b1;
@@ -464,6 +582,229 @@ module lcd_axi_controller #(
     assign lcd_rst_n  = ctrl_reg[1];
     assign lcd_bl_ctr = ctrl_reg[2];
     assign lcd_db     = lcd_db_oe ? lcd_db_reg : 16'hzzzz;
+
+endmodule
+
+
+// Read-only AXI3 framebuffer engine.  At most one burst is outstanding.  A
+// 64-bit read beat is converted to four low-byte-first RGB565 pixels, matching
+// the little-endian framebuffer layout used by Linux fbdev.
+module lcd_dma_reader (
+    input  wire        clk,
+    input  wire        resetn,
+    input  wire        clear,
+    input  wire        start,
+    input  wire        ack,
+    input  wire [31:0] base_addr,
+    input  wire [31:0] byte_length,
+    output reg         busy,
+    output reg         done,
+    output reg         error,
+    output reg         irq,
+
+    output wire        pixel_valid,
+    input  wire        pixel_ready,
+    output wire [15:0] pixel_data,
+
+    output wire [3:0]  m_axi_arid,
+    output wire [31:0] m_axi_araddr,
+    output wire [3:0]  m_axi_arlen,
+    output wire [2:0]  m_axi_arsize,
+    output wire [1:0]  m_axi_arburst,
+    output wire [1:0]  m_axi_arlock,
+    output wire [3:0]  m_axi_arcache,
+    output wire [2:0]  m_axi_arprot,
+    output wire        m_axi_arvalid,
+    input  wire        m_axi_arready,
+    input  wire [3:0]  m_axi_rid,
+    input  wire [63:0] m_axi_rdata,
+    input  wire [1:0]  m_axi_rresp,
+    input  wire        m_axi_rlast,
+    input  wire        m_axi_rvalid,
+    output wire        m_axi_rready
+);
+
+    localparam [3:0] DMA_AXI_ID = 4'h3;
+
+    reg [31:0] next_addr;
+    reg [31:0] words_unrequested;
+    reg        arvalid_reg;
+    reg [31:0] araddr_reg;
+    reg [4:0]  planned_beats;
+    reg        burst_active;
+    reg [4:0]  response_beats_left;
+    reg        read_complete;
+
+    reg [63:0] word_data;
+    reg        word_valid;
+    reg [1:0]  word_pixel_index;
+
+    wire pixel_take = pixel_valid && pixel_ready;
+    wire read_take = m_axi_rvalid && m_axi_rready;
+    wire expected_last = response_beats_left == 5'd1;
+
+    // Limit every burst to 16 words and prevent a burst from crossing a 4 KiB
+    // AXI boundary.  The start address itself is required to be word aligned.
+    function [4:0] choose_burst_words;
+        input [31:0] words_left;
+        input [8:0] address_word;
+        reg [9:0] boundary_words;
+        begin
+            boundary_words = 10'd512 - {1'b0, address_word};
+            if (words_left < 32'd16)
+                choose_burst_words = words_left[4:0];
+            else if (boundary_words < 10'd16)
+                choose_burst_words = boundary_words[4:0];
+            else
+                choose_burst_words = 5'd16;
+        end
+    endfunction
+
+    assign pixel_valid = word_valid;
+    assign pixel_data = (word_pixel_index == 2'd0) ? word_data[15:0]  :
+                        (word_pixel_index == 2'd1) ? word_data[31:16] :
+                        (word_pixel_index == 2'd2) ? word_data[47:32] :
+                                                    word_data[63:48];
+
+    assign m_axi_arid    = DMA_AXI_ID;
+    assign m_axi_araddr  = araddr_reg;
+    assign m_axi_arlen   = planned_beats[3:0] - 1'b1;
+    assign m_axi_arsize  = 3'b011;
+    assign m_axi_arburst = 2'b01;
+    assign m_axi_arlock  = 2'b00;
+    assign m_axi_arcache = 4'b0000;
+    assign m_axi_arprot  = 3'b000;
+    assign m_axi_arvalid = arvalid_reg;
+    assign m_axi_rready  = busy && burst_active && !word_valid;
+
+    always @(posedge clk or negedge resetn) begin
+        if (!resetn) begin
+            busy                 <= 1'b0;
+            done                 <= 1'b0;
+            error                <= 1'b0;
+            irq                  <= 1'b0;
+            next_addr            <= 32'b0;
+            words_unrequested    <= 32'b0;
+            arvalid_reg          <= 1'b0;
+            araddr_reg           <= 32'b0;
+            planned_beats        <= 5'b0;
+            burst_active         <= 1'b0;
+            response_beats_left  <= 5'b0;
+            read_complete        <= 1'b0;
+            word_data            <= 64'b0;
+            word_valid           <= 1'b0;
+            word_pixel_index     <= 2'b0;
+        end else if (clear) begin
+            busy                 <= 1'b0;
+            done                 <= 1'b0;
+            error                <= 1'b0;
+            irq                  <= 1'b0;
+            words_unrequested    <= 32'b0;
+            arvalid_reg          <= 1'b0;
+            planned_beats        <= 5'b0;
+            burst_active         <= 1'b0;
+            response_beats_left  <= 5'b0;
+            read_complete        <= 1'b0;
+            word_valid           <= 1'b0;
+            word_pixel_index     <= 2'b0;
+        end else begin
+            if (ack) begin
+                done  <= 1'b0;
+                error <= 1'b0;
+                irq   <= 1'b0;
+            end
+
+            if (start && !busy) begin
+                done                <= 1'b0;
+                error               <= 1'b0;
+                irq                 <= 1'b0;
+                arvalid_reg         <= 1'b0;
+                burst_active        <= 1'b0;
+                response_beats_left <= 5'b0;
+                read_complete       <= 1'b0;
+                word_valid          <= 1'b0;
+                word_pixel_index    <= 2'b0;
+
+                if ((base_addr[2:0] != 3'b000) ||
+                    (byte_length == 32'b0) ||
+                    (byte_length[2:0] != 3'b000)) begin
+                    busy  <= 1'b0;
+                    done  <= 1'b1;
+                    error <= 1'b1;
+                    irq   <= 1'b1;
+                    words_unrequested <= 32'b0;
+                end else begin
+                    busy              <= 1'b1;
+                    next_addr         <= base_addr;
+                    words_unrequested <= byte_length >> 3;
+                end
+            end else if (busy) begin
+                if (!arvalid_reg && !burst_active && !read_complete &&
+                    (words_unrequested != 32'b0)) begin
+                    araddr_reg    <= next_addr;
+                    planned_beats <= choose_burst_words(words_unrequested,
+                                                         next_addr[11:3]);
+                    arvalid_reg   <= 1'b1;
+                end
+
+                if (arvalid_reg && m_axi_arready) begin
+                    arvalid_reg         <= 1'b0;
+                    burst_active        <= 1'b1;
+                    response_beats_left <= planned_beats;
+                    next_addr           <= next_addr +
+                                           {24'b0, planned_beats, 3'b000};
+                    words_unrequested   <= words_unrequested -
+                                           {27'b0, planned_beats};
+                end
+
+                if (read_take) begin
+                    word_data      <= m_axi_rdata;
+                    word_valid     <= 1'b1;
+                    word_pixel_index <= 2'b0;
+
+                    if ((m_axi_rresp != 2'b00) ||
+                        (m_axi_rid != DMA_AXI_ID))
+                        error <= 1'b1;
+
+                    if (expected_last) begin
+                        burst_active        <= 1'b0;
+                        response_beats_left <= 5'b0;
+                        if (!m_axi_rlast)
+                            error <= 1'b1;
+                        if (words_unrequested == 32'b0)
+                            read_complete <= 1'b1;
+                    end else begin
+                        response_beats_left <= response_beats_left - 1'b1;
+                        if (m_axi_rlast) begin
+                            // An early RLAST makes the remaining transfer
+                            // unrecoverable; drain the word already received
+                            // and complete with the error flag set.
+                            error                <= 1'b1;
+                            burst_active         <= 1'b0;
+                            response_beats_left  <= 5'b0;
+                            words_unrequested    <= 32'b0;
+                            read_complete        <= 1'b1;
+                            arvalid_reg          <= 1'b0;
+                        end
+                    end
+                end
+
+                if (pixel_take) begin
+                    if (word_pixel_index != 2'd3) begin
+                        word_pixel_index <= word_pixel_index + 1'b1;
+                    end else begin
+                        word_valid     <= 1'b0;
+                        word_pixel_index <= 2'b0;
+                        if (read_complete) begin
+                            busy <= 1'b0;
+                            done <= 1'b1;
+                            irq  <= 1'b1;
+                        end
+                    end
+                end
+            end
+        end
+    end
 
 endmodule
 

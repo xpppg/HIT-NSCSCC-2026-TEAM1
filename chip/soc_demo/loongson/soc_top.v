@@ -497,6 +497,25 @@ wire                      dma0_rlast      ;
 wire                      dma0_rvalid     ;
 wire                      dma0_rready     ;
 
+// LCD framebuffer DMA read master (64-bit AXI, one read burst at a time).
+wire [3:0]                lcd_dma_arid;
+wire [31:0]               lcd_dma_araddr;
+wire [3:0]                lcd_dma_arlen;
+wire [2:0]                lcd_dma_arsize;
+wire [1:0]                lcd_dma_arburst;
+wire [1:0]                lcd_dma_arlock;
+wire [3:0]                lcd_dma_arcache;
+wire [2:0]                lcd_dma_arprot;
+wire                      lcd_dma_arvalid;
+wire                      lcd_dma_arready;
+wire [3:0]                lcd_dma_rid;
+wire [63:0]               lcd_dma_rdata;
+wire [1:0]                lcd_dma_rresp;
+wire                      lcd_dma_rlast;
+wire                      lcd_dma_rvalid;
+wire                      lcd_dma_rready;
+wire                      lcd_dma_irq;
+
 wire [`LID         -1 :0] apb_s_awid;
 wire [`Lawaddr     -1 :0] apb_s_awaddr;
 wire [`Lawlen      -1 :0] apb_s_awlen;
@@ -640,7 +659,10 @@ assign     uart0_ri_i  = UART_RI ;
 wire mac_int;
 wire [5:0] int_out;
 wire [5:0] int_n_i;
-assign int_out = {1'b0,dma_int,nand_int,spi_inta_o,uart0_int,mac_int};
+// The CPU exposes only five interrupt inputs.  The original general-purpose
+// DMA has no Linux driver, so the LCD DMA shares that interrupt input; each
+// controller has an independent status/acknowledge register.
+assign int_out = {1'b0,(dma_int | lcd_dma_irq),nand_int,spi_inta_o,uart0_int,mac_int};
 assign int_n_i = ~int_out;
 
 reg cpu_aresetn_1;
@@ -1704,6 +1726,49 @@ axi_interconnect_0 mig_axi_interconnect (
     .S02_AXI_RVALID       (dma0_rvalid         ),
     .S02_AXI_RREADY       (dma0_rready         ),
 
+    // Dedicated read-only 64-bit input for the LCD framebuffer DMA.  The
+    // generated wrapper retains write pins even in READ-ONLY mode, so all
+    // write request inputs are tied inactive explicitly.
+    .S03_AXI_ARESET_OUT_N (                    ),
+    .S03_AXI_ACLK         (aclk                ),
+    .S03_AXI_AWID         (4'b0                ),
+    .S03_AXI_AWADDR       (32'b0               ),
+    .S03_AXI_AWLEN        (8'b0                ),
+    .S03_AXI_AWSIZE       (3'b0                ),
+    .S03_AXI_AWBURST      (2'b0                ),
+    .S03_AXI_AWLOCK       (1'b0                ),
+    .S03_AXI_AWCACHE      (4'b0                ),
+    .S03_AXI_AWPROT       (3'b0                ),
+    .S03_AXI_AWQOS        (4'b0                ),
+    .S03_AXI_AWVALID      (1'b0                ),
+    .S03_AXI_AWREADY      (                    ),
+    .S03_AXI_WDATA        (64'b0               ),
+    .S03_AXI_WSTRB        (8'b0                ),
+    .S03_AXI_WLAST        (1'b1                ),
+    .S03_AXI_WVALID       (1'b0                ),
+    .S03_AXI_WREADY       (                    ),
+    .S03_AXI_BID          (                    ),
+    .S03_AXI_BRESP        (                    ),
+    .S03_AXI_BVALID       (                    ),
+    .S03_AXI_BREADY       (1'b1                ),
+    .S03_AXI_ARID         (lcd_dma_arid        ),
+    .S03_AXI_ARADDR       (lcd_dma_araddr      ),
+    .S03_AXI_ARLEN        ({4'b0,lcd_dma_arlen}),
+    .S03_AXI_ARSIZE       (lcd_dma_arsize      ),
+    .S03_AXI_ARBURST      (lcd_dma_arburst     ),
+    .S03_AXI_ARLOCK       (lcd_dma_arlock[0]   ),
+    .S03_AXI_ARCACHE      (lcd_dma_arcache     ),
+    .S03_AXI_ARPROT       (lcd_dma_arprot      ),
+    .S03_AXI_ARQOS        (4'b0                ),
+    .S03_AXI_ARVALID      (lcd_dma_arvalid     ),
+    .S03_AXI_ARREADY      (lcd_dma_arready     ),
+    .S03_AXI_RID          (lcd_dma_rid         ),
+    .S03_AXI_RDATA        (lcd_dma_rdata       ),
+    .S03_AXI_RRESP        (lcd_dma_rresp       ),
+    .S03_AXI_RLAST        (lcd_dma_rlast       ),
+    .S03_AXI_RVALID       (lcd_dma_rvalid      ),
+    .S03_AXI_RREADY       (lcd_dma_rready      ),
+
     .M00_AXI_ARESET_OUT_N (ddr_aresetn         ),
     .M00_AXI_ACLK         (c1_clk0             ),
     .M00_AXI_AWID         (mig_awid            ),
@@ -2015,6 +2080,24 @@ lcd_axi_controller #(
     .s_axi_rlast    (lcd_s_rlast   ),
     .s_axi_rvalid   (lcd_s_rvalid  ),
     .s_axi_rready   (lcd_s_rready  ),
+
+    .m_axi_arid     (lcd_dma_arid   ),
+    .m_axi_araddr   (lcd_dma_araddr ),
+    .m_axi_arlen    (lcd_dma_arlen  ),
+    .m_axi_arsize   (lcd_dma_arsize ),
+    .m_axi_arburst  (lcd_dma_arburst),
+    .m_axi_arlock   (lcd_dma_arlock ),
+    .m_axi_arcache  (lcd_dma_arcache),
+    .m_axi_arprot   (lcd_dma_arprot ),
+    .m_axi_arvalid  (lcd_dma_arvalid),
+    .m_axi_arready  (lcd_dma_arready),
+    .m_axi_rid      (lcd_dma_rid     ),
+    .m_axi_rdata    (lcd_dma_rdata   ),
+    .m_axi_rresp    (lcd_dma_rresp   ),
+    .m_axi_rlast    (lcd_dma_rlast   ),
+    .m_axi_rvalid   (lcd_dma_rvalid  ),
+    .m_axi_rready   (lcd_dma_rready  ),
+    .dma_irq        (lcd_dma_irq     ),
 
     .lcd_cs_n       (lcd_cs_n      ),
     .lcd_wr_n       (lcd_wr_n      ),

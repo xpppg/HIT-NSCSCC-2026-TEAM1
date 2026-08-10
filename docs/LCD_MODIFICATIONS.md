@@ -59,10 +59,13 @@ LCD 控制器占用一个 64 KiB 地址窗口：
 | 偏移 | 名称 | 访问 | 定义 |
 | --- | --- | --- | --- |
 | `0x00` | `CTRL` | 读写 | bit0：写 1 触发 FIFO/写引擎软复位；bit1：`lcd_rst_n`；bit2：背光使能 |
-| `0x04` | `STATUS` | 只读 | bit0：FIFO 空；bit1：FIFO 满；bit2：控制器忙；bit3：复位输出状态；bit4：背光状态；bit16:8：FIFO 数据量 |
+| `0x04` | `STATUS` | 只读 | bit0：FIFO 空；bit1：FIFO 满；bit2：控制器忙；bit3：复位输出状态；bit4：背光状态；bit5：DMA忙；bit16:8：FIFO 数据量 |
 | `0x08` | `TIMING` | 读写 | bit7:0：数据建立周期；bit15:8：写低电平周期；bit23:16：数据保持周期 |
 | `0x10` | `CMD` | 只写 | 将低 16 位作为 LCD 命令写入 FIFO，输出时 `lcd_rs=0` |
 | `0x14` | `DATA` | 只写 | 将低 16 位作为 LCD 数据写入 FIFO，输出时 `lcd_rs=1` |
+| `0x18` | `DMA_ADDR` | 读写 | RGB565 framebuffer 的物理起始地址，必须 8 字节对齐 |
+| `0x1c` | `DMA_LEN` | 读写 | DMA 字节数，必须非零且为 8 的整数倍；写入即启动一次传输 |
+| `0x20` | `DMA_STAT` | 读/写确认 | bit0：忙；bit1：完成；bit2：配置或 AXI 响应错误；bit3：中断待处理；任意写入清除完成、错误和中断状态 |
 
 `TIMING` 的每个字段写入 0 时仍按 1 个时钟周期执行。复位默认值为
 `0x0001_0101`，即建立、写脉冲和保持时间各为一个 AXI 时钟周期。
@@ -84,8 +87,16 @@ FIFO：16 位保存命令或数据，额外 1 位保存 `RS` 属性。
 5. 释放 `CS_N` 和数据总线。
 
 当前版本只实现 LCD 写操作，`lcd_rd_n` 固定为高电平，不支持读取 LCD ID、
-GRAM 或状态寄存器。它也不包含帧缓冲和 DMA，像素数据由 CPU 通过 MMIO
-写入。
+GRAM 或状态寄存器。像素既可由 CPU 通过 MMIO 写入，也可由新增的只读 AXI
+DMA 从 DDR framebuffer 取出。DMA 每次读取 64 位并按小端顺序拆成 4 个
+RGB565 像素，像素仍进入原有命令 FIFO，因此复用已经验证的 8080 写时序。
+
+DMA 最多保持一个 AXI burst 在途，每个 burst 最多 16 个 64 位 beat，并保证
+不跨越 4 KiB AXI 边界。DMA 活动时 CPU 对 `CMD`/`DATA` 的写入会被
+`WREADY` 回压，防止命令和像素交叉；其他控制寄存器仍可访问。软件必须先用
+`CMD`/`DATA` 设置 LCD 矩形窗口并发送 `0x2c00`，然后依次写入
+`DMA_ADDR`、`DMA_LEN`。软件软复位在 DMA 忙时被忽略，避免中止已经被 DDR
+接受的 AXI burst。
 
 对从 `DATA` 寄存器开始的 AXI burst 做了流式处理：后续每个 beat 仍被视为
 LCD 数据，而不是因地址递增落到其他寄存器。这为以后增加 DMA 批量像素传输
@@ -121,6 +132,15 @@ output        lcd_bl_ctr;
 
 顶层增加了一组 `lcd_s_*` AXI 信号，将 `axi_slave_mux` 的 `s5` 连接到
 `lcd_axi_controller`。控制器与 SoC 外设总线共用 `aclk` 和 `aresetn`。
+
+新增的 `lcd_dma_*` 是 64 位只读 AXI master。Vivado
+`axi_interconnect_0` 的 Slave Interface 数量由 3 增加到 4：原
+`DMA_MASTER0` 继续独占 64 位 `S02_AXI`，LCD DMA 连接新增的 64 位、
+READ-ONLY `S03_AXI`。S03 与其他 SoC 主设备一样使用 `aclk`，相对
+Interconnect 的 `c1_clk0` 配置为异步，并启用寄存切片和 32 深度读 FIFO。
+DDR 侧 `M00_AXI` 仍为 32 位，位宽转换和多个主设备间的仲裁由 Vivado AXI
+Interconnect 完成。LCD DMA 完成中断与原 DMA 共用 CPU 的 DMA 中断输入，
+二者通过各自状态寄存器判断和确认。
 
 ## 8. FPGA 管脚约束
 
@@ -248,14 +268,30 @@ Linux 使用 `/home/xpg/chiplab-old/la32r-Linux` 源码树。以下参数已统�
 位于 `software/lvgl_test_linux`，通过 `/dev/fb0` 输出，不需要修改根文件系统
 即可经 TFTP 下载运行。
 
+fbdev 的 deferred-I/O 回调会读取 mmap 产生的脏页列表，将脏字节范围扩展为
+完整 LCD 行后执行局部刷新。首次显示、fbcon 和普通 `write()` 等没有脏页信息
+的路径仍执行整屏刷新。这样 LVGL 只修改进度条或文字时，不再重复发送全部
+384000 个像素，同时保持传统 framebuffer 操作兼容。
+
+Linux 驱动已切换到硬件 DMA 刷新。原 `vzalloc()` shadow framebuffer 和
+`fb_deferred_io_mmap` 保留，因此 `/dev/fb0`、fbcon 和现有 LVGL 程序的接口均
+不变。驱动另用 `dma_alloc_coherent()` 申请 32 行（480 × 32 × 2 = 30720
+字节）的连续中转缓冲区。每次刷新把脏行按最多 32 行分块复制到该缓冲区，设置
+LCD 窗口，然后依次写 `DMA_ADDR`、`DMA_LEN` 并轮询 `DMA_STAT`。这种设计不
+依赖当前未启用的 CMA，也避免把物理不连续的 vmalloc 页面直接交给硬件。
+
+当前版本使用轮询而非 DMA 完成中断。SoC 把 DMA 接到第五个外部中断输入，但
+`arch/loongarch/loongson32/irq.c` 目前只使能并分发前四个外部输入，因此该线
+在 Linux 下保持屏蔽。若以后改为中断完成，需要同时扩展体系结构中断分发、
+设备树中断号和驱动 IRQ handler，不能只在 LCD 节点增加 `interrupts` 属性。
+
 ## 12. 验证状态和后续工作
 
 目前已经完成裸机程序的交叉编译和 ELF 结构检查。完整验证仍需以下步骤：
 
-1. 使用 Vivado 对修改后的工程完成综合、实现并生成 bitstream；
-2. 检查实现阶段是否存在管脚冲突、IO Bank 电压或时序问题；
-3. 下载 bitstream 后先观察串口中的 AXI 寄存器自检结果；
-4. 使用示波器或逻辑分析仪检查 `CS_N`、`WR_N`、`RS` 和数据总线时序；
-5. 若屏幕仍无显示，核对 `rst_rom.coe` 所针对的 LCD 控制芯片型号，并检查
-   8080 总线的 `CS_N`、`WR_N`、`RS` 和数据建立/保持时间；
-6. 如需提高刷新速度，可进一步增加 DMA 或帧缓冲机制。
+1. 启动新 `vmlinux`，确认日志出现 30720 字节 coherent DMA 缓冲区地址；
+2. 检查 `/dev/fb0` 和 `fbset` 参数仍为 480 × 800 RGB565；
+3. 分别使用全黑、RGB565 图片和 LVGL 验证整屏与局部刷新；
+4. 检查 `dmesg` 中没有 `LCD framebuffer flush timed out` 或 DMA error；
+5. 用逻辑分析仪确认 DMA 刷新时 `CS_N`、`WR_N`、`RS` 和数据总线连续输出；
+6. 稳定后再评估是否需要扩展 Linux IP4 中断支持，将轮询改为完成中断。
