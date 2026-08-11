@@ -1,5 +1,5 @@
-RUN_SOFTWARE=nscscc_perf/quick_sort
-TRACE_COMP=n
+RUN_SOFTWARE=dhrystone
+TRACE_COMP=y
 SIMU_TRACE=y
 MEM_TRACE=n
 RUN_FUNC=n
