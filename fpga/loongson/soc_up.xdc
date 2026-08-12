@@ -293,3 +293,45 @@ set_property PACKAGE_PIN N26 [get_ports i2s_data]
 set_property IOSTANDARD LVCMOS33 [get_ports i2s_bclk]
 set_property IOSTANDARD LVCMOS33 [get_ports i2s_lrclk]
 set_property IOSTANDARD LVCMOS33 [get_ports i2s_data]
+
+# Multimedia clock-domain crossings
+#
+# The AXI register/DMA logic, VGA scanout and I2S serializer are clocked by
+# three independent PLL/MMCM outputs. Their intentional crossings use XPM
+# asynchronous FIFOs, two-flop synchronizers or Gray/toggle synchronizers.
+# Although the clock generators use the same 100 MHz board oscillator, their
+# output phases are not a functional timing relationship.
+# Clocking Wizard generated-clock objects are attached inside each IP, not
+# necessarily to the top-level wrapper output pin when this XDC is evaluated.
+# Use their actual generated-clock names (also shown by report_timing) so a
+# failed pin lookup cannot silently omit the entire CDC exception.
+set multimedia_axi_clk [get_clocks -quiet clk_out2_clk_pll_33]
+set multimedia_i2s_clk [get_clocks -quiet clk_out1_clk_wiz_i2s]
+set multimedia_vga_clk [get_clocks -quiet clk_out1_clk_wiz_vga]
+
+if {[llength $multimedia_axi_clk] != 1} {
+    error "Expected clock clk_out2_clk_pll_33, found: $multimedia_axi_clk"
+}
+if {[llength $multimedia_i2s_clk] != 1} {
+    error "Expected clock clk_out1_clk_wiz_i2s, found: $multimedia_i2s_clk"
+}
+if {[llength $multimedia_vga_clk] != 1} {
+    error "Expected clock clk_out1_clk_wiz_vga, found: $multimedia_vga_clk"
+}
+
+set_clock_groups -name multimedia_async_domains -asynchronous \
+    -group $multimedia_axi_clk \
+    -group $multimedia_i2s_clk \
+    -group $multimedia_vga_clk
+
+# Only the reset synchronizer registers intentionally receive an asynchronous
+# clear. All downstream VGA/I2S state is released synchronously
+# by pix_resetn/aud_resetn and must remain fully timed inside its own domain.
+set multimedia_reset_sync_clr [get_pins -quiet -hierarchical -filter \
+    {REF_PIN_NAME == CLR &&
+     (NAME =~ *pix_reset_sync_reg* || NAME =~ *aud_reset_sync_reg*)}]
+if {[llength $multimedia_reset_sync_clr] > 0} {
+    set_false_path -to $multimedia_reset_sync_clr
+} else {
+    puts "WARNING: multimedia reset synchronizer CLR pins were not found"
+}

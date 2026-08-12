@@ -20,9 +20,23 @@ module avp_vga (
     output reg         vga_vsync,
     output reg         underflow_event
 );
-    reg [1:0] enable_sync;
-    always @(posedge pix_clk or negedge bus_resetn) begin
-        if (!bus_resetn)
+    // The AXI reset and MMCM lock indication are asynchronous to pix_clk.
+    // Assert reset immediately, but release it only after two pixel clocks so
+    // the raster registers never see an asynchronous recovery/removal edge.
+    wire pix_async_resetn = bus_resetn && pix_locked;
+    (* ASYNC_REG = "TRUE", SHREG_EXTRACT = "NO" *)
+    reg [1:0] pix_reset_sync;
+    always @(posedge pix_clk or negedge pix_async_resetn) begin
+        if (!pix_async_resetn)
+            pix_reset_sync <= 2'b00;
+        else
+            pix_reset_sync <= {pix_reset_sync[0], 1'b1};
+    end
+    wire pix_resetn = pix_reset_sync[1];
+
+    (* ASYNC_REG = "TRUE", SHREG_EXTRACT = "NO" *) reg [1:0] enable_sync;
+    always @(posedge pix_clk) begin
+        if (!pix_resetn)
             enable_sync <= 2'b00;
         else
             enable_sync <= {enable_sync[0], enable};
@@ -45,10 +59,10 @@ module avp_vga (
 
     // Give the DMA time to prefill the FIFO before releasing the raster.
     reg [10:0] startup_count;
-    wire timing_reset = !pix_locked || !enable_sync[1] ||
+    wire timing_reset = !pix_resetn || !enable_sync[1] ||
                         (startup_count != 11'h7ff);
-    always @(posedge pix_clk or negedge bus_resetn) begin
-        if (!bus_resetn || !pix_locked || !enable_sync[1])
+    always @(posedge pix_clk) begin
+        if (!pix_resetn || !enable_sync[1])
             startup_count <= 0;
         else if (startup_count != 11'h7ff)
             startup_count <= startup_count + 1'b1;
@@ -69,8 +83,8 @@ module avp_vga (
     reg underflow_active;
     reg underflow_toggle;
 
-    always @(posedge pix_clk or negedge bus_resetn) begin
-        if (!bus_resetn) begin
+    always @(posedge pix_clk) begin
+        if (!pix_resetn) begin
             fifo_rd <= 1'b0;
             pixel_tail <= 0;
             pixel_lane <= 0;
@@ -139,7 +153,7 @@ module avp_vga (
         end
     end
 
-    reg [2:0] underflow_sync;
+    (* ASYNC_REG = "TRUE", SHREG_EXTRACT = "NO" *) reg [2:0] underflow_sync;
     always @(posedge bus_clk or negedge bus_resetn) begin
         if (!bus_resetn) begin
             underflow_sync <= 0;

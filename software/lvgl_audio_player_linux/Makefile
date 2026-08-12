@@ -5,15 +5,22 @@ STRIP := $(CROSS_COMPILE)strip
 TARGET := lvgl_audio_player
 BUILD_DIR := build
 LVGL_DIR ?= ../lvgl_test_linux/vendor
+BUILDROOT_STAGING ?= /home/xpg/chiplab-old/la32r-buildroot/output/staging
 LVGL_SRCS := $(shell find $(LVGL_DIR)/src -type f -name '*.c')
 SRCS := main.c $(LVGL_SRCS)
 OBJS := $(addprefix $(BUILD_DIR)/,$(SRCS:.c=.o))
 
-CPPFLAGS := -DLV_CONF_INCLUDE_SIMPLE -I. -I$(LVGL_DIR)
+CPPFLAGS := -DLV_CONF_INCLUDE_SIMPLE -I. -I$(LVGL_DIR) \
+	-I$(BUILDROOT_STAGING)/usr/include
 CFLAGS := -Os -std=gnu99 -ffunction-sections -fdata-sections \
 	-Wall -Wextra -Wno-unused-parameter
-LDFLAGS := -Wl,--gc-sections
-LDLIBS := -lm
+LDFLAGS := -Wl,--gc-sections \
+	-Wl,-rpath-link,$(BUILDROOT_STAGING)/usr/lib
+# Link the target shared object explicitly.  Adding the whole Buildroot staging
+# lib directory with -L would make this standalone toolchain consume the
+# staging libc linker script, whose absolute paths belong to Buildroot's
+# sysroot and cannot be resolved by the standalone compiler driver.
+LDLIBS := $(BUILDROOT_STAGING)/usr/lib/libasound.so.2.0.0 -lpthread -lm
 
 .PHONY: all clean check
 

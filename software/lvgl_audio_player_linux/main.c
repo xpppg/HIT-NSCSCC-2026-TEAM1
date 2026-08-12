@@ -1,9 +1,11 @@
 #include "lvgl.h"
 #include "src/drivers/display/fb/lv_linux_fbdev.h"
 
+#include <alsa/asoundlib.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/input.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -16,6 +18,8 @@
 #define TRACK_LENGTH_SECONDS 228U
 #define UI_REFRESH_MS        100U
 #define PLAYLIST_COUNT       5U
+#define AUDIO_CHUNK_FRAMES   1024U
+#define AUDIO_PATH_MAX       256U
 
 /*
  * This BSP reports a 200 MHz constant counter although the FPGA counter
@@ -32,6 +36,29 @@ enum player_view {
     PLAYER_VIEW_MENU,
 };
 
+struct wav_file {
+    FILE *file;
+    uint32_t data_bytes;
+    uint32_t data_remaining;
+    uint32_t total_frames;
+};
+
+struct audio_engine {
+    pthread_t thread;
+    pthread_mutex_t lock;
+    pthread_cond_t changed;
+    char device[AUDIO_PATH_MAX];
+    char paths[PLAYLIST_COUNT][AUDIO_PATH_MAX];
+    unsigned int selected_track;
+    unsigned int generation;
+    uint64_t frames_written;
+    uint32_t duration_ms;
+    bool pause_requested;
+    bool paused;
+    bool active;
+    bool terminate;
+};
+
 struct player_ui;
 
 struct track_event_data {
@@ -42,10 +69,10 @@ struct track_event_data {
 struct player_ui {
     lv_obj_t *progress;
     lv_obj_t *elapsed;
+    lv_obj_t *duration;
     lv_obj_t *song;
     lv_obj_t *pause_label;
-    uint64_t start_ms;
-    uint32_t start_position_ms;
+    struct audio_engine *audio;
     unsigned int current_track;
     bool paused;
     bool render_pending;
@@ -66,21 +93,304 @@ struct touch_input {
     bool pressed;
 };
 
-static const char *const playlist[] = {
-    "01  Blue Horizon.wav",
-    "02  Morning Light.wav",
-    "03  Loongson Dream.wav",
-    "04  Network Radio.wav",
-    "05  LCD Test Tone.wav",
+static const char *const default_track_paths[] = {
+    "/tmp/test.wav",
+    "/tmp/track02.wav",
+    "/tmp/track03.wav",
+    "/tmp/track04.wav",
+    "/tmp/track05.wav",
 };
 
-static const char *const track_titles[] = {
-    "Blue Horizon",
-    "Morning Light",
-    "Loongson Dream",
-    "Network Radio",
-    "LCD Test Tone",
-};
+static const char *audio_track_name(const struct audio_engine *audio,
+                                    unsigned int track)
+{
+    const char *name = strrchr(audio->paths[track % PLAYLIST_COUNT], '/');
+
+    return name != NULL ? name + 1 : audio->paths[track % PLAYLIST_COUNT];
+}
+
+static uint16_t wav_read_u16(const unsigned char *data)
+{
+    return (uint16_t)data[0] | ((uint16_t)data[1] << 8);
+}
+
+static uint32_t wav_read_u32(const unsigned char *data)
+{
+    return (uint32_t)data[0] | ((uint32_t)data[1] << 8) |
+           ((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 24);
+}
+
+static int wav_open(struct wav_file *wav, const char *path)
+{
+    unsigned char header[12];
+    uint16_t format = 0;
+    uint16_t channels = 0;
+    uint16_t bits = 0;
+    uint16_t block_align = 0;
+    uint32_t rate = 0;
+    bool have_fmt = false;
+
+    memset(wav, 0, sizeof(*wav));
+    wav->file = fopen(path, "rb");
+    if(wav->file == NULL) return -errno;
+    if(fread(header, 1, sizeof(header), wav->file) != sizeof(header) ||
+       memcmp(header, "RIFF", 4) != 0 || memcmp(header + 8, "WAVE", 4) != 0)
+        goto invalid;
+
+    for(;;) {
+        unsigned char chunk[8];
+        uint32_t size;
+
+        if(fread(chunk, 1, sizeof(chunk), wav->file) != sizeof(chunk))
+            goto invalid;
+        size = wav_read_u32(chunk + 4);
+        if(memcmp(chunk, "fmt ", 4) == 0) {
+            unsigned char fmt[16];
+
+            if(size < sizeof(fmt) || fread(fmt, 1, sizeof(fmt), wav->file) !=
+               sizeof(fmt))
+                goto invalid;
+            format = wav_read_u16(fmt);
+            channels = wav_read_u16(fmt + 2);
+            rate = wav_read_u32(fmt + 4);
+            block_align = wav_read_u16(fmt + 12);
+            bits = wav_read_u16(fmt + 14);
+            if(size > sizeof(fmt) &&
+               fseek(wav->file, (long)(size - sizeof(fmt)), SEEK_CUR) != 0)
+                goto invalid;
+            have_fmt = true;
+        }
+        else if(memcmp(chunk, "data", 4) == 0) {
+            if(!have_fmt || format != 1 || channels != 2 || rate != 44100 ||
+               bits != 16 || block_align != 4)
+                goto invalid;
+            wav->data_bytes = size;
+            wav->data_remaining = size;
+            wav->total_frames = size / 4U;
+            return 0;
+        }
+        else if(fseek(wav->file, (long)size, SEEK_CUR) != 0) {
+            goto invalid;
+        }
+        if((size & 1U) && fseek(wav->file, 1, SEEK_CUR) != 0)
+            goto invalid;
+    }
+
+invalid:
+    fclose(wav->file);
+    wav->file = NULL;
+    return -EINVAL;
+}
+
+static void audio_set_state(struct audio_engine *audio, bool active,
+                            bool paused, uint64_t frames, uint32_t duration)
+{
+    pthread_mutex_lock(&audio->lock);
+    audio->active = active;
+    audio->paused = paused;
+    audio->frames_written = frames;
+    audio->duration_ms = duration;
+    pthread_mutex_unlock(&audio->lock);
+}
+
+static void *audio_thread_main(void *data)
+{
+    struct audio_engine *audio = data;
+    unsigned int handled_generation = 0;
+    int16_t samples[AUDIO_CHUNK_FRAMES * 2U];
+
+    for(;;) {
+        struct wav_file wav;
+        snd_pcm_t *pcm = NULL;
+        unsigned int generation;
+        unsigned int track;
+        uint64_t frames_written = 0;
+        uint32_t duration_ms;
+        int result;
+
+        pthread_mutex_lock(&audio->lock);
+        while(!audio->terminate && audio->generation == handled_generation)
+            pthread_cond_wait(&audio->changed, &audio->lock);
+        if(audio->terminate) {
+            pthread_mutex_unlock(&audio->lock);
+            break;
+        }
+        generation = audio->generation;
+        handled_generation = generation;
+        track = audio->selected_track;
+        pthread_mutex_unlock(&audio->lock);
+
+        result = wav_open(&wav, audio->paths[track]);
+        if(result < 0) {
+            fprintf(stderr, "Cannot play %s: expected 44.1kHz stereo S16_LE WAV\n",
+                    audio->paths[track]);
+            audio_set_state(audio, false, false, 0, 0);
+            continue;
+        }
+        duration_ms = (uint32_t)((uint64_t)wav.total_frames * 1000U / 44100U);
+        result = snd_pcm_open(&pcm, audio->device, SND_PCM_STREAM_PLAYBACK, 0);
+        if(result < 0) {
+            fprintf(stderr, "Cannot open ALSA %s: %s\n", audio->device,
+                    snd_strerror(result));
+            fclose(wav.file);
+            audio_set_state(audio, false, false, 0, duration_ms);
+            continue;
+        }
+        result = snd_pcm_set_params(pcm, SND_PCM_FORMAT_S16_LE,
+                                    SND_PCM_ACCESS_RW_INTERLEAVED,
+                                    2, 44100, 0, 350000);
+        if(result < 0) {
+            fprintf(stderr, "Cannot configure ALSA: %s\n", snd_strerror(result));
+            snd_pcm_close(pcm);
+            fclose(wav.file);
+            audio_set_state(audio, false, false, 0, duration_ms);
+            continue;
+        }
+        audio_set_state(audio, true, false, 0, duration_ms);
+        printf("Playing track %u: %s\n", track + 1U, audio->paths[track]);
+
+        while(wav.data_remaining != 0U) {
+            size_t bytes = wav.data_remaining;
+            size_t got;
+            snd_pcm_sframes_t offset = 0;
+            snd_pcm_sframes_t frames;
+            bool pause_requested;
+            bool changed = false;
+
+            if(bytes > sizeof(samples)) bytes = sizeof(samples);
+            got = fread(samples, 1, bytes, wav.file);
+            if(got == 0U) break;
+            wav.data_remaining -= (uint32_t)got;
+            frames = (snd_pcm_sframes_t)(got / 4U);
+
+            while(offset < frames) {
+                pthread_mutex_lock(&audio->lock);
+                changed = audio->terminate || audio->generation != generation;
+                pause_requested = audio->pause_requested;
+                pthread_mutex_unlock(&audio->lock);
+                if(changed) break;
+
+                if(pause_requested) {
+                    bool hardware_paused = false;
+                    snd_pcm_state_t state = snd_pcm_state(pcm);
+
+                    if(state == SND_PCM_STATE_RUNNING) {
+                        result = snd_pcm_pause(pcm, 1);
+                        hardware_paused = result == 0;
+                    }
+                    else if(state == SND_PCM_STATE_XRUN) {
+                        /* Leave the recovered stream prepared while the UI is
+                         * paused.  The first write after resume starts it. */
+                        snd_pcm_prepare(pcm);
+                    }
+                    pthread_mutex_lock(&audio->lock);
+                    audio->paused = true;
+                    while(!audio->terminate && audio->generation == generation &&
+                          audio->pause_requested)
+                        pthread_cond_wait(&audio->changed, &audio->lock);
+                    changed = audio->terminate || audio->generation != generation;
+                    audio->paused = false;
+                    pthread_mutex_unlock(&audio->lock);
+                    if(changed) break;
+                    result = hardware_paused ? snd_pcm_pause(pcm, 0) : 0;
+                    if(result < 0) {
+                        fprintf(stderr, "ALSA resume failed: %s\n",
+                                snd_strerror(result));
+                        snd_pcm_prepare(pcm);
+                    }
+                    continue;
+                }
+
+                result = (int)snd_pcm_writei(pcm, samples + offset * 2,
+                                             (snd_pcm_uframes_t)(frames - offset));
+                if(result == -EPIPE) {
+                    fprintf(stderr, "ALSA underrun, recovering\n");
+                    snd_pcm_prepare(pcm);
+                    continue;
+                }
+                if(result < 0) {
+                    fprintf(stderr, "ALSA write failed: %s\n",
+                            snd_strerror(result));
+                    changed = true;
+                    break;
+                }
+                offset += result;
+                frames_written += (uint64_t)result;
+                audio_set_state(audio, true, false, frames_written, duration_ms);
+            }
+            if(changed) break;
+        }
+
+        pthread_mutex_lock(&audio->lock);
+        result = audio->terminate || audio->generation != generation;
+        pthread_mutex_unlock(&audio->lock);
+        if(result)
+            snd_pcm_drop(pcm);
+        else
+            snd_pcm_drain(pcm);
+        snd_pcm_close(pcm);
+        fclose(wav.file);
+        audio_set_state(audio, false, false, frames_written, duration_ms);
+    }
+    return NULL;
+}
+
+static int audio_engine_init(struct audio_engine *audio, const char *device,
+                             const char *const paths[PLAYLIST_COUNT])
+{
+    unsigned int i;
+
+    memset(audio, 0, sizeof(*audio));
+    pthread_mutex_init(&audio->lock, NULL);
+    pthread_cond_init(&audio->changed, NULL);
+    snprintf(audio->device, sizeof(audio->device), "%s", device);
+    for(i = 0; i < PLAYLIST_COUNT; ++i)
+        snprintf(audio->paths[i], sizeof(audio->paths[i]), "%s",
+                 paths[i]);
+    /* The worker initially waits.  main() starts generation 1 only after the
+     * expensive first full-screen render has completed. */
+    audio->generation = 0;
+    return pthread_create(&audio->thread, NULL, audio_thread_main, audio);
+}
+
+static void audio_engine_select(struct audio_engine *audio, unsigned int track)
+{
+    pthread_mutex_lock(&audio->lock);
+    audio->selected_track = track % PLAYLIST_COUNT;
+    audio->pause_requested = false;
+    audio->generation++;
+    pthread_cond_broadcast(&audio->changed);
+    pthread_mutex_unlock(&audio->lock);
+}
+
+static void audio_engine_pause(struct audio_engine *audio, bool paused)
+{
+    pthread_mutex_lock(&audio->lock);
+    audio->pause_requested = paused;
+    pthread_cond_broadcast(&audio->changed);
+    pthread_mutex_unlock(&audio->lock);
+}
+
+static void audio_engine_status(struct audio_engine *audio,
+                                uint32_t *position_ms, uint32_t *duration_ms)
+{
+    pthread_mutex_lock(&audio->lock);
+    *position_ms = (uint32_t)(audio->frames_written * 1000U / 44100U);
+    *duration_ms = audio->duration_ms;
+    pthread_mutex_unlock(&audio->lock);
+}
+
+static void audio_engine_shutdown(struct audio_engine *audio)
+{
+    pthread_mutex_lock(&audio->lock);
+    audio->terminate = true;
+    audio->generation++;
+    pthread_cond_broadcast(&audio->changed);
+    pthread_mutex_unlock(&audio->lock);
+    pthread_join(audio->thread, NULL);
+    pthread_cond_destroy(&audio->changed);
+    pthread_mutex_destroy(&audio->lock);
+}
 
 static void render_view(struct player_ui *ui);
 
@@ -120,10 +430,27 @@ static void app_sleep_ms(uint32_t real_ms)
 
 static uint32_t player_position_ms(const struct player_ui *ui)
 {
-    uint64_t elapsed_ms = ui->paused ? 0U : app_monotonic_ms() - ui->start_ms;
+    uint32_t position_ms;
+    uint32_t duration_ms;
 
-    return (uint32_t)((ui->start_position_ms + elapsed_ms) %
-                      (TRACK_LENGTH_SECONDS * 1000U));
+    audio_engine_status(ui->audio, &position_ms, &duration_ms);
+    return position_ms;
+}
+
+static uint32_t player_duration_ms(const struct player_ui *ui)
+{
+    uint32_t position_ms;
+    uint32_t duration_ms;
+
+    audio_engine_status(ui->audio, &position_ms, &duration_ms);
+    return duration_ms != 0U ? duration_ms : TRACK_LENGTH_SECONDS * 1000U;
+}
+
+static void format_time(char *text, size_t size, uint32_t time_ms)
+{
+    uint32_t seconds = time_ms / 1000U;
+
+    snprintf(text, size, "%02u:%02u", seconds / 60U, seconds % 60U);
 }
 
 static void set_panel_style(lv_obj_t *obj, uint32_t color, lv_opa_t opacity,
@@ -208,13 +535,13 @@ static void pause_button_cb(lv_event_t *event)
     struct player_ui *ui = lv_event_get_user_data(event);
 
     if(ui->paused) {
-        ui->start_ms = app_monotonic_ms();
         ui->paused = false;
+        audio_engine_pause(ui->audio, false);
         lv_label_set_text(ui->pause_label, LV_SYMBOL_PAUSE "  PAUSE");
     }
     else {
-        ui->start_position_ms = player_position_ms(ui);
         ui->paused = true;
+        audio_engine_pause(ui->audio, true);
         lv_label_set_text(ui->pause_label, LV_SYMBOL_PLAY "  PLAY");
     }
 }
@@ -224,10 +551,10 @@ static void next_button_cb(lv_event_t *event)
     struct player_ui *ui = lv_event_get_user_data(event);
 
     ui->current_track = (ui->current_track + 1U) % PLAYLIST_COUNT;
-    ui->start_position_ms = 0U;
-    ui->start_ms = app_monotonic_ms();
     ui->paused = false;
-    lv_label_set_text(ui->song, track_titles[ui->current_track]);
+    audio_engine_select(ui->audio, ui->current_track);
+    lv_label_set_text(ui->song, audio_track_name(ui->audio,
+                                                ui->current_track));
     lv_label_set_text(ui->pause_label, LV_SYMBOL_PAUSE "  PAUSE");
 }
 
@@ -251,9 +578,8 @@ static void track_button_cb(lv_event_t *event)
     struct player_ui *ui = track->ui;
 
     ui->current_track = track->index;
-    ui->start_position_ms = 0U;
-    ui->start_ms = app_monotonic_ms();
     ui->paused = false;
+    audio_engine_select(ui->audio, ui->current_track);
     request_view(ui, PLAYER_VIEW_NOW_PLAYING);
 }
 
@@ -265,8 +591,8 @@ static void create_player_view(struct player_ui *ui)
     lv_obj_t *note;
     lv_obj_t *now_playing;
     lv_obj_t *artist;
-    lv_obj_t *duration;
     lv_obj_t *footer;
+    char duration_text[16];
 
     create_header(screen, "Touch-enabled framebuffer player");
 
@@ -304,9 +630,13 @@ static void create_player_view(struct player_ui *ui)
     lv_obj_align(now_playing, LV_ALIGN_TOP_MID, 0, 410);
 
     ui->song = lv_label_create(screen);
-    lv_label_set_text(ui->song, track_titles[ui->current_track]);
+    lv_label_set_text(ui->song, audio_track_name(ui->audio,
+                                                ui->current_track));
     lv_obj_set_style_text_font(ui->song, &lv_font_montserrat_28, 0);
     lv_obj_set_style_text_color(ui->song, lv_color_white(), 0);
+    lv_obj_set_width(ui->song, 420);
+    lv_label_set_long_mode(ui->song, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(ui->song, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(ui->song, LV_ALIGN_TOP_MID, 0, 440);
 
     artist = lv_label_create(screen);
@@ -318,7 +648,7 @@ static void create_player_view(struct player_ui *ui)
     ui->progress = lv_bar_create(screen);
     lv_obj_set_size(ui->progress, 390, 12);
     lv_obj_align(ui->progress, LV_ALIGN_TOP_MID, 0, 530);
-    lv_bar_set_range(ui->progress, 0, TRACK_LENGTH_SECONDS * 1000U);
+    lv_bar_set_range(ui->progress, 0, (int32_t)player_duration_ms(ui));
     lv_bar_set_value(ui->progress, (int32_t)player_position_ms(ui),
                      LV_ANIM_OFF);
     lv_obj_set_style_radius(ui->progress, LV_RADIUS_CIRCLE, LV_PART_MAIN);
@@ -335,11 +665,12 @@ static void create_player_view(struct player_ui *ui)
     lv_obj_set_style_text_color(ui->elapsed, lv_color_hex(0xc8efff), 0);
     lv_obj_align(ui->elapsed, LV_ALIGN_TOP_LEFT, 45, 552);
 
-    duration = lv_label_create(screen);
-    lv_label_set_text(duration, "03:48");
-    lv_obj_set_style_text_font(duration, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(duration, lv_color_hex(0xc8efff), 0);
-    lv_obj_align(duration, LV_ALIGN_TOP_RIGHT, -45, 552);
+    ui->duration = lv_label_create(screen);
+    format_time(duration_text, sizeof(duration_text), player_duration_ms(ui));
+    lv_label_set_text(ui->duration, duration_text);
+    lv_obj_set_style_text_font(ui->duration, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(ui->duration, lv_color_hex(0xc8efff), 0);
+    lv_obj_align(ui->duration, LV_ALIGN_TOP_RIGHT, -45, 552);
 
     (void)create_control_button(screen,
         ui->paused ? LV_SYMBOL_PLAY "  PLAY" : LV_SYMBOL_PAUSE "  PAUSE",
@@ -393,6 +724,7 @@ static void create_menu_view(struct player_ui *ui)
         lv_obj_t *name = lv_label_create(row);
         lv_obj_t *length = lv_label_create(row);
         bool selected = i == ui->current_track;
+        char name_text[AUDIO_PATH_MAX + 8U];
 
         ui->track_events[i].ui = ui;
         ui->track_events[i].index = i;
@@ -410,9 +742,13 @@ static void create_menu_view(struct player_ui *ui)
                                   0);
         lv_obj_set_style_bg_opa(row, selected ? LV_OPA_90 : LV_OPA_60, 0);
 
-        lv_label_set_text(name, playlist[i]);
+        snprintf(name_text, sizeof(name_text), "%02u  %s", i + 1U,
+                 audio_track_name(ui->audio, i));
+        lv_label_set_text(name, name_text);
         lv_obj_set_style_text_font(name, &lv_font_montserrat_14, 0);
         lv_obj_set_style_text_color(name, lv_color_white(), 0);
+        lv_obj_set_width(name, 270);
+        lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
         lv_obj_align(name, LV_ALIGN_LEFT_MID, 4, 0);
 
         lv_label_set_text(length, selected ? LV_SYMBOL_PLAY " 03:48" : "03:30");
@@ -454,6 +790,7 @@ static void render_view(struct player_ui *ui)
 
     ui->progress = NULL;
     ui->elapsed = NULL;
+    ui->duration = NULL;
     ui->song = NULL;
     ui->pause_label = NULL;
     lv_obj_clean(screen);
@@ -468,19 +805,24 @@ static void update_timer_cb(lv_timer_t *timer)
 {
     struct player_ui *ui = lv_timer_get_user_data(timer);
     uint32_t position_ms;
+    uint32_t duration_ms;
     uint32_t position_seconds;
     char text[16];
 
     if(ui->view != PLAYER_VIEW_NOW_PLAYING || ui->progress == NULL ||
-       ui->elapsed == NULL)
+       ui->elapsed == NULL || ui->duration == NULL)
         return;
 
     position_ms = player_position_ms(ui);
+    duration_ms = player_duration_ms(ui);
     position_seconds = position_ms / 1000U;
+    lv_bar_set_range(ui->progress, 0, (int32_t)duration_ms);
     lv_bar_set_value(ui->progress, (int32_t)position_ms, LV_ANIM_OFF);
     snprintf(text, sizeof(text), "%02u:%02u", position_seconds / 60U,
              position_seconds % 60U);
     lv_label_set_text(ui->elapsed, text);
+    format_time(text, sizeof(text), duration_ms);
+    lv_label_set_text(ui->duration, text);
 }
 
 static int32_t map_coordinate(int32_t value, int32_t minimum,
@@ -582,16 +924,22 @@ int main(int argc, char **argv)
 {
     const char *fb_path = "/dev/fb0";
     const char *input_path = "/dev/input/event0";
+    const char *alsa_device = "hw:0,0";
+    const char *track_paths[PLAYLIST_COUNT];
     struct player_ui ui = {
-        .start_position_ms = 84U * 1000U,
         .view = PLAYER_VIEW_NOW_PLAYING,
     };
+    struct audio_engine audio;
     struct touch_input touch;
     lv_display_t *display;
     lv_indev_t *indev;
     bool show_menu = false;
+    unsigned int track_arg = 0;
     int fd;
     int i;
+
+    for(i = 0; i < (int)PLAYLIST_COUNT; ++i)
+        track_paths[i] = default_track_paths[i];
 
     for(i = 1; i < argc; ++i) {
         if(strcmp(argv[i], "--menu") == 0) {
@@ -599,6 +947,17 @@ int main(int argc, char **argv)
         }
         else if(strcmp(argv[i], "--input") == 0 && i + 1 < argc) {
             input_path = argv[++i];
+        }
+        else if(strcmp(argv[i], "--alsa") == 0 && i + 1 < argc) {
+            alsa_device = argv[++i];
+        }
+        else if(strcmp(argv[i], "--track") == 0 && i + 1 < argc) {
+            if(track_arg >= PLAYLIST_COUNT) {
+                fprintf(stderr, "Only %u --track arguments are supported\n",
+                        PLAYLIST_COUNT);
+                return 2;
+            }
+            track_paths[track_arg++] = argv[++i];
         }
         else {
             fb_path = argv[i];
@@ -642,10 +1001,20 @@ int main(int argc, char **argv)
     lv_indev_set_user_data(indev, &touch);
     lv_indev_set_display(indev, display);
 
-    ui.start_ms = app_monotonic_ms();
+    if(audio_engine_init(&audio, alsa_device, track_paths) != 0) {
+        fprintf(stderr, "Cannot start ALSA playback thread\n");
+        close(touch.fd);
+        return 1;
+    }
+    ui.audio = &audio;
     ui.view = show_menu ? PLAYER_VIEW_MENU : PLAYER_VIEW_NOW_PLAYING;
     render_view(&ui);
     lv_timer_create(update_timer_cb, UI_REFRESH_MS, &ui);
+
+    /* Do not let the initial 480x800 render contend with the I2S DMA's first
+     * FIFO fill.  Later progress updates only invalidate small screen areas. */
+    lv_refr_now(display);
+    audio_engine_select(&audio, 0);
 
     printf("LVGL audio player started: fb=%s, input=%s, %ld x %ld, view=%s\n",
            fb_path, input_path,
@@ -655,6 +1024,9 @@ int main(int argc, char **argv)
     printf("Touch range: X=%ld..%ld, Y=%ld..%ld\n",
            (long)touch.min_x, (long)touch.max_x,
            (long)touch.min_y, (long)touch.max_y);
+    printf("ALSA device: %s\n", alsa_device);
+    for(i = 0; i < (int)PLAYLIST_COUNT; ++i)
+        printf("Track %d: %s\n", i + 1, track_paths[i]);
 
     while(running) {
         uint32_t delay_ms = lv_timer_handler();
@@ -664,6 +1036,7 @@ int main(int argc, char **argv)
         app_sleep_ms(delay_ms);
     }
 
+    audio_engine_shutdown(&audio);
     close(touch.fd);
     printf("LVGL audio player stopped\n");
     return 0;

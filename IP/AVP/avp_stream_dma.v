@@ -35,7 +35,6 @@ module avp_stream_dma #(
     input  wire        m_axi_rvalid,
     output wire        m_axi_rready
 );
-    reg enable_d;
     reg [31:0] next_addr;
     reg [31:0] words_left;
     reg arvalid_reg;
@@ -63,7 +62,11 @@ module avp_stream_dma #(
     wire expected_last = response_left == 5'd1;
     assign stream_data = m_axi_rdata;
     assign stream_valid = m_axi_rvalid && running && burst_active;
-    assign m_axi_rready = running && burst_active && stream_ready;
+    // Once an AXI read address has been accepted, every response beat must be
+    // consumed even when software stops the stream.  In drain mode the data
+    // is discarded, but RREADY remains asserted until RLAST so the
+    // interconnect can retire the outstanding transaction.
+    assign m_axi_rready = burst_active && (running ? stream_ready : 1'b1);
     assign m_axi_arid = AXI_ID;
     assign m_axi_araddr = araddr_reg;
     assign m_axi_arlen = planned_beats[3:0] - 1'b1;
@@ -76,19 +79,20 @@ module avp_stream_dma #(
 
     always @(posedge clk or negedge resetn) begin
         if (!resetn) begin
-            enable_d <= 1'b0; running <= 1'b0; error <= 1'b0;
+            running <= 1'b0; error <= 1'b0;
             fetched_pos <= 0; next_addr <= 0; words_left <= 0;
             arvalid_reg <= 1'b0; araddr_reg <= 0; planned_beats <= 0;
             response_left <= 0; burst_active <= 1'b0;
         end else begin
-            enable_d <= enable;
             if (!enable) begin
                 running <= 1'b0; error <= 1'b0; fetched_pos <= 0;
-                arvalid_reg <= 1'b0; burst_active <= 1'b0;
-                response_left <= 0; words_left <= 0;
-            end else if (enable && !enable_d) begin
+                words_left <= 0;
+                // ARVALID is intentionally retained until ARREADY.  AXI does
+                // not permit a master to withdraw a request after asserting
+                // VALID.  Any accepted request is drained below.
+            end else if (!running && !error && !arvalid_reg &&
+                         !burst_active) begin
                 error <= 1'b0; fetched_pos <= 0;
-                arvalid_reg <= 1'b0; burst_active <= 1'b0;
                 if (base_addr[2:0] != 0 || byte_length == 0 ||
                     byte_length[2:0] != 0) begin
                     running <= 1'b0;
@@ -98,26 +102,45 @@ module avp_stream_dma #(
                     next_addr <= base_addr;
                     words_left <= byte_length >> 3;
                 end
-            end else if (running) begin
+            end
+
+            if (running && enable) begin
                 if (!arvalid_reg && !burst_active && words_left != 0) begin
                     araddr_reg <= next_addr;
                     planned_beats <= choose_beats(words_left, next_addr[11:3]);
                     arvalid_reg <= 1'b1;
                 end
-                if (arvalid_reg && m_axi_arready) begin
-                    arvalid_reg <= 1'b0;
-                    burst_active <= 1'b1;
-                    response_left <= planned_beats;
-                    next_addr <= next_addr + {24'b0, planned_beats, 3'b000};
+            end
+
+            // Complete an address handshake even if enable was removed after
+            // ARVALID was asserted.  Requests accepted while stopped enter
+            // drain mode and do not advance the circular-buffer pointers.
+            if (arvalid_reg && m_axi_arready) begin
+                arvalid_reg <= 1'b0;
+                burst_active <= 1'b1;
+                response_left <= planned_beats;
+                if (running && enable) begin
+                    next_addr <= next_addr +
+                                 {24'b0, planned_beats, 3'b000};
                     words_left <= words_left - {27'b0, planned_beats};
                 end
-                if (read_take) begin
+            end
+
+            if (read_take) begin
+                if (running && enable) begin
                     if (m_axi_rresp != 2'b00 || m_axi_rid != AXI_ID ||
                         (m_axi_rlast != expected_last)) begin
                         error <= 1'b1;
                         running <= 1'b0;
                         arvalid_reg <= 1'b0;
-                        burst_active <= 1'b0;
+                        // Even an erroneous burst must be drained through
+                        // RLAST; otherwise it poisons the following transfer.
+                        if (m_axi_rlast) begin
+                            burst_active <= 1'b0;
+                            response_left <= 0;
+                        end else if (response_left != 0) begin
+                            response_left <= response_left - 1'b1;
+                        end
                     end else begin
                         fetched_pos <= (fetched_pos + 8 >= byte_length) ?
                             0 : fetched_pos + 8;
@@ -131,6 +154,15 @@ module avp_stream_dma #(
                         end else begin
                             response_left <= response_left - 1'b1;
                         end
+                    end
+                end else begin
+                    // Stop/error drain path.  Ignore payload and response
+                    // attributes, but consume the complete accepted burst.
+                    if (m_axi_rlast) begin
+                        burst_active <= 1'b0;
+                        response_left <= 0;
+                    end else if (response_left != 0) begin
+                        response_left <= response_left - 1'b1;
                     end
                 end
             end

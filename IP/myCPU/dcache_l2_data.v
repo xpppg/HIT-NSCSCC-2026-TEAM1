@@ -17,11 +17,15 @@ module dcache_l2_data(
     input  wire         wr_en,     // 整行写使能
     input  wire [511:0] wr_data,
 
-    output reg  [511:0] rd_data    // 1拍后有效(地址由index/way给出)
+    output wire [511:0] rd_data    // 1拍后有效(地址由index/way给出)
 );
 
     (* ram_style = "block" *) reg [511:0] mem_way0 [255:0];
     (* ram_style = "block" *) reg [511:0] mem_way1 [255:0];
+
+    reg [511:0] rd_way0;
+    reg [511:0] rd_way1;
+    reg         way_d;
 
     always @(posedge clk) begin
         if (wr_en) begin
@@ -33,7 +37,11 @@ module dcache_l2_data(
     end
 
     always @(posedge clk) begin
-        rd_data <= way ? mem_way1[index] : mem_way0[index];
+        rd_way0 <= mem_way0[index];
+        rd_way1 <= mem_way1[index];
+        way_d   <= way;
     end
+
+    assign rd_data = way_d ? rd_way1 : rd_way0;
 
 endmodule

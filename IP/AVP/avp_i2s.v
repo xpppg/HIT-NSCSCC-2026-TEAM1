@@ -22,6 +22,19 @@ module avp_i2s (
     output reg         i2s_lrclk,
     output reg         i2s_data
 );
+    // The AXI reset and MMCM lock indication are asynchronous to aud_clk.
+    // Assert reset immediately, then release it synchronously in this domain.
+    wire aud_async_resetn = bus_resetn && aud_locked;
+    (* ASYNC_REG = "TRUE", SHREG_EXTRACT = "NO" *)
+    reg [1:0] aud_reset_sync;
+    always @(posedge aud_clk or negedge aud_async_resetn) begin
+        if (!aud_async_resetn)
+            aud_reset_sync <= 2'b00;
+        else
+            aud_reset_sync <= {aud_reset_sync[0], 1'b1};
+    end
+    wire aud_resetn = aud_reset_sync[1];
+
     wire fifo_reset = !bus_resetn || !enable;
     wire fifo_full;
     wire fifo_empty;
@@ -37,11 +50,11 @@ module avp_i2s (
         .empty(fifo_empty)
     );
 
-    reg [1:0] enable_sync;
+    (* ASYNC_REG = "TRUE", SHREG_EXTRACT = "NO" *) reg [1:0] enable_sync;
     reg [31:0] buffer_bytes_a;
     reg [31:0] period_bytes_a;
-    always @(posedge aud_clk or negedge bus_resetn) begin
-        if (!bus_resetn) begin
+    always @(posedge aud_clk) begin
+        if (!aud_resetn) begin
             enable_sync <= 0;
             buffer_bytes_a <= 0;
             period_bytes_a <= 0;
@@ -56,13 +69,13 @@ module avp_i2s (
 
     reg [3:0] clock_div;
     reg [10:0] startup_count;
-    wire audio_active = enable_sync[1] && aud_locked &&
+    wire audio_active = enable_sync[1] && aud_resetn &&
                         startup_count == 11'h7ff;
     assign i2s_bclk = audio_active ? clock_div[3] : 1'b0;
     wire bclk_falling = clock_div == 4'hf;
 
-    always @(posedge aud_clk or negedge bus_resetn) begin
-        if (!bus_resetn || !enable_sync[1] || !aud_locked)
+    always @(posedge aud_clk) begin
+        if (!aud_resetn || !enable_sync[1])
             startup_count <= 0;
         else if (startup_count != 11'h7ff)
             startup_count <= startup_count + 1'b1;
@@ -80,8 +93,8 @@ module avp_i2s (
     reg underflow_toggle;
     reg underflow_active;
 
-    always @(posedge aud_clk or negedge bus_resetn) begin
-        if (!bus_resetn) begin
+    always @(posedge aud_clk) begin
+        if (!aud_resetn) begin
             fifo_rd <= 0;
             clock_div <= 0;
             sample_word <= 0;
@@ -179,7 +192,9 @@ module avp_i2s (
     // play_pos is monotonic in the audio clock domain.  Gray coding prevents
     // torn multi-bit reads when it is observed by the register clock.
     wire [31:0] play_gray_a = (play_pos_a >> 1) ^ play_pos_a;
+    (* ASYNC_REG = "TRUE", SHREG_EXTRACT = "NO" *)
     reg [31:0] play_gray_s1, play_gray_s2;
+    (* ASYNC_REG = "TRUE", SHREG_EXTRACT = "NO" *)
     reg [2:0] period_sync, underflow_sync;
     integer gray_index;
     always @* begin
