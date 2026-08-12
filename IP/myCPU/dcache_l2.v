@@ -80,8 +80,11 @@ module dcache_l2
     reg  [17:0]  victim_tag_r;  // victim 的原tag(仅在需要淘汰时使用)
     reg          is_hit_r;      // 本次事务在L2是否命中
     reg  [511:0] fetched_data;  // 从主存取回的整行数据(读缺失路径)
+    reg  [511:0] resp_data;     // 返回给L1的整行数据(读命中路径)
 
     // -------------------- tag子模块查询/更新信号 --------------------
+    wire [31:0] tagv_addr = (state == S_IDLE) ? (l1_awvalid ? l1_awaddr : l1_araddr) : req_addr;
+    //在IDLE阶段, 直接把L1的地址送到tagv模块, 这样经过1拍寄存后, 进入LOOKUP阶段时tagv的输出刚好有效, 不多耗一拍。
     wire        hit_any, hit_way;
     wire        victim_way, victim_valid, victim_dirty;
     wire [17:0] victim_tag;
@@ -110,7 +113,7 @@ module dcache_l2
     assign l1_arready = (state == S_IDLE) & ~l1_awvalid;
 
     assign l1_rvalid = (state == S_RD_RESP);
-    assign l1_rdata  = is_hit_r ? rd_data : fetched_data;
+    assign l1_rdata  = resp_data;//is_hit_r ? rd_data : fetched_data;
 
     // -------------------- 主存侧握手 --------------------
     assign arvalid = (state == S_FETCH_SEND);
@@ -162,6 +165,7 @@ module dcache_l2
                 end
 
                 S_RD_HIT: begin
+                    resp_data <= rd_data;
                     state <= S_RD_RESP;
                 end
 
@@ -195,6 +199,7 @@ module dcache_l2
                     // 二次确认(与L1对主存的写通道一样是fire-and-forget,
                     // l1_awready已经在S_IDLE那一拍完成了握手)。
                     // 读路径: 还需要把数据交给L1, 转S_RD_RESP。
+                    resp_data <= fetched_data;
                     state <= mode ? S_IDLE : S_RD_RESP;
                 end
 
@@ -207,7 +212,7 @@ module dcache_l2
     dcache_l2_tagv u_dcache_l2_tagv (
         .clk          (clk),
         .rst          (rst),
-        .addr         (req_addr),
+        .addr         (tagv_addr),
         .hit_any      (hit_any),
         .hit_way      (hit_way),
         .victim_way   (victim_way),
