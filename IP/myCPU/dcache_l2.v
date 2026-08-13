@@ -1,9 +1,9 @@
 // =====================================================================
 // dcache_l2.v
-// 32KB 二级 D-Cache 主控模块, 位于 L1 dcache 与主存之间
+// 64KB 二级 D-Cache 主控模块, 位于 L1 dcache 与主存之间
 //
 // 参数: 2路组相联, 64B/512bit 行, 与L1行大小一致(便于整行搬运)
-//       32KB = 256组 x 2路 x 64B  => index[13:6], tag[31:14], offset[5:0]
+//       64KB = 512组 x 2路 x 64B  => index[14:6], tag[31:15], offset[5:0]
 //
 // 端口分两组总线, 协议均为"valid握手, 地址/数据在valid期间保持不变直到
 // 对端ready", 与dcache.v中L1访问主存的AXI精简协议完全一致:
@@ -77,7 +77,7 @@ module dcache_l2
     reg  [31:0]  req_addr;
     reg  [511:0] req_wdata;
     reg          target_way;    // 本次事务最终要写入/读出的路号
-    reg  [17:0]  victim_tag_r;  // victim 的原tag(仅在需要淘汰时使用)
+    reg  [16:0]  victim_tag_r;  // victim 的原tag(仅在需要淘汰时使用)
     reg          is_hit_r;      // 本次事务在L2是否命中
     reg  [511:0] fetched_data;  // 从主存取回的整行数据(读缺失路径)
     reg  [511:0] resp_data;     // 返回给L1的整行数据(读命中路径)
@@ -87,7 +87,7 @@ module dcache_l2
     //在IDLE阶段, 直接把L1的地址送到tagv模块, 这样经过1拍寄存后, 进入LOOKUP阶段时tagv的输出刚好有效, 不多耗一拍。
     wire        hit_any, hit_way;
     wire        victim_way, victim_valid, victim_dirty;
-    wire [17:0] victim_tag;
+    wire [16:0] victim_tag;
 
     wire tag_alloc_en    = (state == S_ALLOC_WR);
     wire tag_alloc_way   = target_way;
@@ -97,7 +97,7 @@ module dcache_l2
 
     // -------------------- data子模块访问信号 --------------------
     wire [511:0] rd_data;
-    wire [7:0]   data_index = req_addr[13:6];
+    wire [8:0]   data_index = req_addr[14:6];
     // S_LOOKUP阶段用组合的hit/victim路号提前打到地址口, 这样经过1拍寄存
     // 后, 进入S_RD_HIT/S_EV_READ时rd_data刚好有效, 不多耗一拍。
     wire         data_way   = (state == S_LOOKUP) ? (hit_any ? hit_way : victim_way)
@@ -122,7 +122,7 @@ module dcache_l2
     assign rready  = (state == S_FETCH_REC);
 
     assign awvalid     = (state == S_EV_SEND);
-    assign awaddr      = {victim_tag_r, req_addr[13:6], 6'b0};
+    assign awaddr      = {victim_tag_r, req_addr[14:6], 6'b0};
     assign awcacheline = rd_data;
 
     // -------------------- 主状态机 --------------------
