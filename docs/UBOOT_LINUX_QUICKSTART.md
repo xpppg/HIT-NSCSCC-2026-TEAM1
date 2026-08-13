@@ -240,3 +240,4 @@ bootelf 0xa3000000 vmlinux console=tty0 console=ttyS0,115200 rdinit=/init
 ```sh
 echo 0 > /sys/class/graphics/fbcon/cursor_blink
 ```
+bootelf 0xa3000000 vmlinux console=tty0 console=ttyS0,115200 rdinit=/init initcall_blacklist=la32r_vga_driver_init,la32r_ps2_driver_init
