@@ -1,5 +1,5 @@
-RUN_SOFTWARE=coremark
-TRACE_COMP=y
+RUN_SOFTWARE=nscscc_perf/fireye_C0
+TRACE_COMP=n
 SIMU_TRACE=y
 MEM_TRACE=n
 RUN_FUNC=n

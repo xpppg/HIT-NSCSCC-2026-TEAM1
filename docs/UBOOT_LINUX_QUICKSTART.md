@@ -241,3 +241,41 @@ bootelf 0xa3000000 vmlinux console=tty0 console=ttyS0,115200 rdinit=/init
 echo 0 > /sys/class/graphics/fbcon/cursor_blink
 ```
 bootelf 0xa3000000 vmlinux console=tty0 console=ttyS0,115200 rdinit=/init initcall_blacklist=la32r_vga_driver_init,la32r_ps2_driver_init
+
+ip link set eth0 up
+ip addr replace 169.254.89.144/16 dev eth0
+ping -c 3 169.254.89.146
+
+tftp -g \
+    -r lvgl_audio_player \
+    -l /tmp/lvgl_audio_player \
+    169.254.89.146
+
+tftp -g \
+    -r haruhikage.wav \
+    -l /tmp/original.wav \
+    169.254.89.146
+
+chmod +x /tmp/lvgl_audio_player
+
+echo 0 > /sys/class/graphics/fbcon/cursor_blink
+printf '\033[?25l' > /dev/tty1
+
+/tmp/lvgl_audio_player /dev/fb0 \
+    --input /dev/input/event1 \
+    --alsa hw:0,0 \
+    --track /tmp/xp_startup.wav
+
+
+
+tftp -g \
+    -r xp_startup.wav \
+    -l /tmp/music/xp_startup.wav \
+    169.254.89.146
+
+/tmp/lvgl_audio_player /dev/fb0 \
+    --input /dev/input/event1 \
+    --alsa hw:0,0 \
+    --music-dir /tmp/music
+
+openvt -c 1 -s -f -- /bin/sh

@@ -97,11 +97,27 @@ int main(int argc, char **argv)
         return 1;
     }
     /* Let the host synchronizer observe the released clock before the
-       keyboard starts producing its clock pulses. */
-    ticks(dut, 8);
+       keyboard starts producing its clock pulses.  This delay is longer than
+       the old 0.2-ms watchdog at the simulation's 1-MHz system clock, so it
+       also verifies that send_req reloads the extended TX watchdog. */
+    ticks(dut, 1000);
+    if (!dut.busy || errors != 0) {
+        std::fprintf(stderr,
+                     "FAIL PS/2 TX watchdog expired before device clock\n");
+        return 1;
+    }
+
+    /* START is the request-to-send condition and is already asserted before
+       the keyboard starts clocking.  Each of the next ten keyboard clocks
+       transfers D0..D7, parity and stop; host-to-device data is prepared
+       during the low phase and sampled by the keyboard on the rising edge. */
+    if (dut.ps2_data_level) {
+        std::fprintf(stderr, "FAIL PS/2 START was not held low\n");
+        return 1;
+    }
 
     unsigned int frame = 0;
-    for (unsigned int bit = 0; bit < 11; ++bit) {
+    for (unsigned int bit = 0; bit < 10; ++bit) {
         dut.dev_clk_low = 1;
         ticks(dut, 4);
         frame |= static_cast<unsigned int>(dut.ps2_data_level) << bit;
@@ -109,14 +125,17 @@ int main(int argc, char **argv)
         ticks(dut, 4);
     }
     dut.dev_data_low = 1;
-    device_clock(dut);
+    /* A keyboard supplies one additional clock while holding DATA low for
+       ACK.  Allow input synchronization/setup time, then verify that the host
+       completes the transfer on this single clock. */
+    ticks(dut, 4);
     device_clock(dut);
     dut.dev_data_low = 0;
     ticks(dut, 8);
 
-    const unsigned int expected = (0xedU << 1) |
-        ((!(static_cast<unsigned int>(__builtin_popcount(0xed)) & 1U)) << 9) |
-        (1U << 10);
+    const unsigned int expected = 0xedU |
+        ((!(static_cast<unsigned int>(__builtin_popcount(0xed)) & 1U)) << 8) |
+        (1U << 9);
     if (frame != expected || dut.busy || errors != 0) {
         std::fprintf(stderr,
                      "FAIL PS/2 TX frame=%03x expected=%03x busy=%u errors=%u\n",

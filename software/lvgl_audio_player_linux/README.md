@@ -1,14 +1,19 @@
 # LA32R LVGL audio player
 
 This program draws a 480 x 800 player on `/dev/fb0`, reads the Goodix touch
-screen from `/dev/input/event0`, and plays WAV files through ALSA device
+screen from `/dev/input/event1`, and plays WAV files through ALSA device
 `hw:0,0`.  Playback runs in a separate pthread, so blocking ALSA writes do not
 block LVGL rendering or touch handling.
+
+At startup the program scans a music directory, validates all `.wav` files and
+builds the playlist in case-insensitive filename order.  The menu count and
+each duration come from the files actually found; unsupported WAV files are
+reported and skipped.  Up to 64 playable tracks are supported.
 
 The Pause/Play and Next buttons control the real PCM stream.  Selecting a row
 in Menu immediately switches the ALSA stream to that track.  The progress bar
 is derived from the number of stereo frames accepted by ALSA rather than from
-an independent UI timer.
+an independent UI timer, and its total length comes from the WAV data chunk.
 
 Only the hardware format supported by the first LA32R I2S implementation is
 accepted:
@@ -40,14 +45,17 @@ ffmpeg -i input.flac -ar 44100 -ac 2 -c:a pcm_s16le test.wav
 ```
 
 Place `lvgl_audio_player` and the WAV files in the TFTP server directory.  On
-the running target Linux system:
+the running target Linux system, create a directory and download every song
+into it:
 
 ```sh
 ip link set eth0 up
 ip addr add 169.254.89.144/16 dev eth0
 
 tftp -g -r lvgl_audio_player -l /tmp/lvgl_audio_player 169.254.89.146
-tftp -g -r test.wav -l /tmp/test.wav 169.254.89.146
+mkdir -p /tmp/music
+tftp -g -r song01.wav -l /tmp/music/song01.wav 169.254.89.146
+tftp -g -r song02.wav -l /tmp/music/song02.wav 169.254.89.146
 chmod +x /tmp/lvgl_audio_player
 ```
 
@@ -63,24 +71,24 @@ with LVGL for `/dev/fb0`:
 echo 0 > /sys/class/graphics/fbcon/cursor_blink
 printf '\033[?25l' > /dev/tty1
 /tmp/lvgl_audio_player /dev/fb0 \
-    --input /dev/input/event0 \
+    --input /dev/input/event1 \
     --alsa hw:0,0 \
-    --track /tmp/test.wav
+    --music-dir /tmp/music
 ```
 
-The first `--track` replaces playlist item 1, the second replaces item 2, and
-so on, up to five files.  For example:
+Use `--track` to select the initial song.  It does not create a fixed playlist;
+the other WAV files in `--music-dir` remain available:
 
 ```sh
-/tmp/lvgl_audio_player /dev/fb0 --input /dev/input/event0 \
-    --track /tmp/song01.wav \
-    --track /tmp/song02.wav \
-    --track /tmp/song03.wav
+/tmp/lvgl_audio_player /dev/fb0 --input /dev/input/event1 \
+    --music-dir /tmp/music \
+    --track /tmp/music/song02.wav
 ```
 
-Without arguments the defaults are `/tmp/test.wav` and
-`/tmp/track02.wav` through `/tmp/track05.wav`.  Add `--menu` to open directly
-on the playlist.  Press `Ctrl+C` on the serial console to stop.
+If `--track` is supplied without `--music-dir`, the program automatically
+scans the selected file's parent directory.  Without either option it scans
+`/tmp`.  Add `--menu` to open directly on the scrollable playlist.  Press
+`Ctrl+C` on the serial console to stop.
 
 Before testing Pause, Next, playlist switching, or `Ctrl+C` during playback,
 program the FPGA with the updated `avp_stream_dma.v`.  That version drains an

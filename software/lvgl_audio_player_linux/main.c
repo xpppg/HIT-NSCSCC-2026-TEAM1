@@ -2,6 +2,7 @@
 #include "src/drivers/display/fb/lv_linux_fbdev.h"
 
 #include <alsa/asoundlib.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/input.h>
@@ -10,14 +11,16 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
 
-#define TRACK_LENGTH_SECONDS 228U
 #define UI_REFRESH_MS        100U
-#define PLAYLIST_COUNT       5U
+#define PLAYLIST_MAX_TRACKS  64U
 #define AUDIO_CHUNK_FRAMES   1024U
 #define AUDIO_PATH_MAX       256U
 
@@ -43,12 +46,24 @@ struct wav_file {
     uint32_t total_frames;
 };
 
+struct audio_track {
+    char path[AUDIO_PATH_MAX];
+    char name[AUDIO_PATH_MAX];
+    uint32_t duration_ms;
+};
+
+struct playlist {
+    struct audio_track tracks[PLAYLIST_MAX_TRACKS];
+    unsigned int count;
+};
+
 struct audio_engine {
     pthread_t thread;
     pthread_mutex_t lock;
     pthread_cond_t changed;
     char device[AUDIO_PATH_MAX];
-    char paths[PLAYLIST_COUNT][AUDIO_PATH_MAX];
+    struct audio_track tracks[PLAYLIST_MAX_TRACKS];
+    unsigned int track_count;
     unsigned int selected_track;
     unsigned int generation;
     uint64_t frames_written;
@@ -77,7 +92,8 @@ struct player_ui {
     bool paused;
     bool render_pending;
     enum player_view view;
-    struct track_event_data track_events[PLAYLIST_COUNT];
+    const char *input_path;
+    struct track_event_data track_events[PLAYLIST_MAX_TRACKS];
 };
 
 struct touch_input {
@@ -93,20 +109,16 @@ struct touch_input {
     bool pressed;
 };
 
-static const char *const default_track_paths[] = {
-    "/tmp/test.wav",
-    "/tmp/track02.wav",
-    "/tmp/track03.wav",
-    "/tmp/track04.wav",
-    "/tmp/track05.wav",
-};
-
 static const char *audio_track_name(const struct audio_engine *audio,
                                     unsigned int track)
 {
-    const char *name = strrchr(audio->paths[track % PLAYLIST_COUNT], '/');
+    return audio->tracks[track % audio->track_count].name;
+}
 
-    return name != NULL ? name + 1 : audio->paths[track % PLAYLIST_COUNT];
+static uint32_t audio_track_duration(const struct audio_engine *audio,
+                                     unsigned int track)
+{
+    return audio->tracks[track % audio->track_count].duration_ms;
 }
 
 static uint16_t wav_read_u16(const unsigned char *data)
@@ -182,6 +194,109 @@ invalid:
     return -EINVAL;
 }
 
+static bool has_wav_extension(const char *name)
+{
+    const char *extension = strrchr(name, '.');
+
+    return extension != NULL && strcasecmp(extension, ".wav") == 0;
+}
+
+static int track_compare(const void *left, const void *right)
+{
+    const struct audio_track *a = left;
+    const struct audio_track *b = right;
+
+    return strcasecmp(a->name, b->name);
+}
+
+static int playlist_scan(struct playlist *playlist, const char *directory)
+{
+    struct dirent *entry;
+    DIR *dir;
+
+    memset(playlist, 0, sizeof(*playlist));
+    dir = opendir(directory);
+    if(dir == NULL) return -errno;
+
+    while((entry = readdir(dir)) != NULL) {
+        struct audio_track *track;
+        struct wav_file wav;
+        struct stat status;
+        int length;
+
+        if(entry->d_name[0] == '.' || !has_wav_extension(entry->d_name))
+            continue;
+        if(playlist->count >= PLAYLIST_MAX_TRACKS) {
+            fprintf(stderr, "Playlist limited to %u WAV files; remaining files ignored\n",
+                    PLAYLIST_MAX_TRACKS);
+            break;
+        }
+
+        track = &playlist->tracks[playlist->count];
+        if(strcmp(directory, "/") == 0)
+            length = snprintf(track->path, sizeof(track->path), "/%s",
+                              entry->d_name);
+        else
+            length = snprintf(track->path, sizeof(track->path), "%s/%s",
+                              directory, entry->d_name);
+        if(length < 0 || (size_t)length >= sizeof(track->path)) {
+            fprintf(stderr, "Skipping overlong path: %s/%s\n",
+                    directory, entry->d_name);
+            continue;
+        }
+        if(stat(track->path, &status) != 0 || !S_ISREG(status.st_mode))
+            continue;
+        if(wav_open(&wav, track->path) != 0) {
+            fprintf(stderr, "Skipping unsupported WAV: %s\n", track->path);
+            continue;
+        }
+
+        snprintf(track->name, sizeof(track->name), "%s", entry->d_name);
+        track->duration_ms =
+            (uint32_t)((uint64_t)wav.total_frames * 1000U / 44100U);
+        fclose(wav.file);
+        playlist->count++;
+    }
+    closedir(dir);
+
+    qsort(playlist->tracks, playlist->count, sizeof(playlist->tracks[0]),
+          track_compare);
+    return playlist->count != 0U ? 0 : -ENOENT;
+}
+
+static void path_directory(char *directory, size_t size, const char *path)
+{
+    const char *slash = strrchr(path, '/');
+    size_t length;
+
+    if(slash == NULL) {
+        snprintf(directory, size, ".");
+        return;
+    }
+    if(slash == path) {
+        snprintf(directory, size, "/");
+        return;
+    }
+    length = (size_t)(slash - path);
+    if(length >= size) length = size - 1U;
+    memcpy(directory, path, length);
+    directory[length] = '\0';
+}
+
+static unsigned int playlist_find(const struct playlist *playlist,
+                                  const char *path)
+{
+    const char *name = strrchr(path, '/');
+    unsigned int index;
+
+    name = name != NULL ? name + 1 : path;
+    for(index = 0; index < playlist->count; ++index)
+        if(strcmp(playlist->tracks[index].path, path) == 0 ||
+           strcmp(playlist->tracks[index].name, name) == 0)
+            return index;
+    return 0;
+}
+
 static void audio_set_state(struct audio_engine *audio, bool active,
                             bool paused, uint64_t frames, uint32_t duration)
 {
@@ -220,10 +335,10 @@ static void *audio_thread_main(void *data)
         track = audio->selected_track;
         pthread_mutex_unlock(&audio->lock);
 
-        result = wav_open(&wav, audio->paths[track]);
+        result = wav_open(&wav, audio->tracks[track].path);
         if(result < 0) {
             fprintf(stderr, "Cannot play %s: expected 44.1kHz stereo S16_LE WAV\n",
-                    audio->paths[track]);
+                    audio->tracks[track].path);
             audio_set_state(audio, false, false, 0, 0);
             continue;
         }
@@ -247,7 +362,8 @@ static void *audio_thread_main(void *data)
             continue;
         }
         audio_set_state(audio, true, false, 0, duration_ms);
-        printf("Playing track %u: %s\n", track + 1U, audio->paths[track]);
+        printf("Playing track %u/%u: %s (%u ms)\n", track + 1U,
+               audio->track_count, audio->tracks[track].path, duration_ms);
 
         while(wav.data_remaining != 0U) {
             size_t bytes = wav.data_remaining;
@@ -336,17 +452,15 @@ static void *audio_thread_main(void *data)
 }
 
 static int audio_engine_init(struct audio_engine *audio, const char *device,
-                             const char *const paths[PLAYLIST_COUNT])
+                             const struct playlist *playlist)
 {
-    unsigned int i;
-
     memset(audio, 0, sizeof(*audio));
     pthread_mutex_init(&audio->lock, NULL);
     pthread_cond_init(&audio->changed, NULL);
     snprintf(audio->device, sizeof(audio->device), "%s", device);
-    for(i = 0; i < PLAYLIST_COUNT; ++i)
-        snprintf(audio->paths[i], sizeof(audio->paths[i]), "%s",
-                 paths[i]);
+    memcpy(audio->tracks, playlist->tracks,
+           (size_t)playlist->count * sizeof(playlist->tracks[0]));
+    audio->track_count = playlist->count;
     /* The worker initially waits.  main() starts generation 1 only after the
      * expensive first full-screen render has completed. */
     audio->generation = 0;
@@ -356,7 +470,7 @@ static int audio_engine_init(struct audio_engine *audio, const char *device,
 static void audio_engine_select(struct audio_engine *audio, unsigned int track)
 {
     pthread_mutex_lock(&audio->lock);
-    audio->selected_track = track % PLAYLIST_COUNT;
+    audio->selected_track = track % audio->track_count;
     audio->pause_requested = false;
     audio->generation++;
     pthread_cond_broadcast(&audio->changed);
@@ -443,7 +557,8 @@ static uint32_t player_duration_ms(const struct player_ui *ui)
     uint32_t duration_ms;
 
     audio_engine_status(ui->audio, &position_ms, &duration_ms);
-    return duration_ms != 0U ? duration_ms : TRACK_LENGTH_SECONDS * 1000U;
+    return duration_ms != 0U ? duration_ms :
+           audio_track_duration(ui->audio, ui->current_track);
 }
 
 static void format_time(char *text, size_t size, uint32_t time_ms)
@@ -550,7 +665,7 @@ static void next_button_cb(lv_event_t *event)
 {
     struct player_ui *ui = lv_event_get_user_data(event);
 
-    ui->current_track = (ui->current_track + 1U) % PLAYLIST_COUNT;
+    ui->current_track = (ui->current_track + 1U) % ui->audio->track_count;
     ui->paused = false;
     audio_engine_select(ui->audio, ui->current_track);
     lv_label_set_text(ui->song, audio_track_name(ui->audio,
@@ -681,7 +796,13 @@ static void create_player_view(struct player_ui *ui)
                                 menu_button_cb, ui, NULL);
 
     footer = lv_label_create(screen);
-    lv_label_set_text(footer, "Touch input: /dev/input/event0");
+    {
+        char footer_text[AUDIO_PATH_MAX + 16U];
+
+        snprintf(footer_text, sizeof(footer_text), "Touch input: %s",
+                 ui->input_path);
+        lv_label_set_text(footer, footer_text);
+    }
     lv_obj_set_style_text_font(footer, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(footer, lv_color_hex(0x8fc8da), 0);
     lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -25);
@@ -696,6 +817,7 @@ static void create_menu_view(struct player_ui *ui)
     lv_obj_t *footer;
     lv_obj_t *back;
     lv_obj_t *back_label;
+    char hint_text[32];
     unsigned int i;
 
     create_header(screen, "Touch a song to play");
@@ -703,7 +825,8 @@ static void create_menu_view(struct player_ui *ui)
     panel = lv_obj_create(screen);
     lv_obj_set_size(panel, 420, 570);
     lv_obj_align(panel, LV_ALIGN_TOP_MID, 0, 112);
-    lv_obj_remove_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(panel, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scroll_dir(panel, LV_DIR_VER);
     lv_obj_set_style_pad_all(panel, 18, 0);
     set_panel_style(panel, 0x083f61, LV_OPA_80, 24);
 
@@ -714,22 +837,26 @@ static void create_menu_view(struct player_ui *ui)
     lv_obj_align(heading, LV_ALIGN_TOP_LEFT, 5, 4);
 
     hint = lv_label_create(panel);
-    lv_label_set_text(hint, "5 songs found");
+    snprintf(hint_text, sizeof(hint_text), "%u song%s found",
+             ui->audio->track_count,
+             ui->audio->track_count == 1U ? "" : "s");
+    lv_label_set_text(hint, hint_text);
     lv_obj_set_style_text_font(hint, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(hint, lv_color_hex(0x9edbf1), 0);
     lv_obj_align(hint, LV_ALIGN_TOP_RIGHT, -5, 8);
 
-    for(i = 0; i < PLAYLIST_COUNT; ++i) {
+    for(i = 0; i < ui->audio->track_count; ++i) {
         lv_obj_t *row = lv_obj_create(panel);
         lv_obj_t *name = lv_label_create(row);
         lv_obj_t *length = lv_label_create(row);
         bool selected = i == ui->current_track;
         char name_text[AUDIO_PATH_MAX + 8U];
+        char length_text[24];
 
         ui->track_events[i].ui = ui;
         ui->track_events[i].index = i;
-        lv_obj_set_size(row, 380, 76);
-        lv_obj_align(row, LV_ALIGN_TOP_MID, 0, 55 + (int32_t)i * 91);
+        lv_obj_set_size(row, 380, 64);
+        lv_obj_align(row, LV_ALIGN_TOP_MID, 0, 55 + (int32_t)i * 72);
         lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(row, track_button_cb, LV_EVENT_CLICKED,
@@ -751,7 +878,18 @@ static void create_menu_view(struct player_ui *ui)
         lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
         lv_obj_align(name, LV_ALIGN_LEFT_MID, 4, 0);
 
-        lv_label_set_text(length, selected ? LV_SYMBOL_PLAY " 03:48" : "03:30");
+        format_time(length_text, sizeof(length_text),
+                    audio_track_duration(ui->audio, i));
+        if(selected) {
+            char selected_text[32];
+
+            snprintf(selected_text, sizeof(selected_text), LV_SYMBOL_PLAY " %s",
+                     length_text);
+            lv_label_set_text(length, selected_text);
+        }
+        else {
+            lv_label_set_text(length, length_text);
+        }
         lv_obj_set_style_text_font(length, &lv_font_montserrat_14, 0);
         lv_obj_set_style_text_color(length, lv_color_hex(0xa7e4f3), 0);
         lv_obj_align(length, LV_ALIGN_RIGHT_MID, -3, 0);
@@ -923,9 +1061,13 @@ static int touch_input_open(struct touch_input *touch, const char *path,
 int main(int argc, char **argv)
 {
     const char *fb_path = "/dev/fb0";
-    const char *input_path = "/dev/input/event0";
+    const char *input_path = "/dev/input/event1";
     const char *alsa_device = "hw:0,0";
-    const char *track_paths[PLAYLIST_COUNT];
+    const char *music_directory = "/tmp";
+    const char *initial_track_path = NULL;
+    char derived_directory[AUDIO_PATH_MAX];
+    bool music_directory_explicit = false;
+    struct playlist playlist;
     struct player_ui ui = {
         .view = PLAYER_VIEW_NOW_PLAYING,
     };
@@ -934,12 +1076,9 @@ int main(int argc, char **argv)
     lv_display_t *display;
     lv_indev_t *indev;
     bool show_menu = false;
-    unsigned int track_arg = 0;
+    unsigned int initial_track = 0;
     int fd;
     int i;
-
-    for(i = 0; i < (int)PLAYLIST_COUNT; ++i)
-        track_paths[i] = default_track_paths[i];
 
     for(i = 1; i < argc; ++i) {
         if(strcmp(argv[i], "--menu") == 0) {
@@ -951,18 +1090,41 @@ int main(int argc, char **argv)
         else if(strcmp(argv[i], "--alsa") == 0 && i + 1 < argc) {
             alsa_device = argv[++i];
         }
+        else if(strcmp(argv[i], "--music-dir") == 0 && i + 1 < argc) {
+            music_directory = argv[++i];
+            music_directory_explicit = true;
+        }
         else if(strcmp(argv[i], "--track") == 0 && i + 1 < argc) {
-            if(track_arg >= PLAYLIST_COUNT) {
-                fprintf(stderr, "Only %u --track arguments are supported\n",
-                        PLAYLIST_COUNT);
-                return 2;
-            }
-            track_paths[track_arg++] = argv[++i];
+            initial_track_path = argv[++i];
+        }
+        else if(strcmp(argv[i], "--help") == 0) {
+            printf("Usage: %s [fbdev] [--input event] [--alsa pcm] "
+                   "[--music-dir dir] [--track initial.wav] [--menu]\n",
+                   argv[0]);
+            return 0;
+        }
+        else if(argv[i][0] == '-') {
+            fprintf(stderr, "Unknown or incomplete option: %s\n", argv[i]);
+            return 2;
         }
         else {
             fb_path = argv[i];
         }
     }
+
+    if(initial_track_path != NULL && !music_directory_explicit) {
+        path_directory(derived_directory, sizeof(derived_directory),
+                       initial_track_path);
+        music_directory = derived_directory;
+    }
+    if(playlist_scan(&playlist, music_directory) != 0) {
+        fprintf(stderr,
+                "No playable 44.1kHz stereo S16_LE WAV files in %s\n",
+                music_directory);
+        return 1;
+    }
+    if(initial_track_path != NULL)
+        initial_track = playlist_find(&playlist, initial_track_path);
 
     fd = open(fb_path, O_RDWR);
     if(fd < 0) {
@@ -1001,12 +1163,14 @@ int main(int argc, char **argv)
     lv_indev_set_user_data(indev, &touch);
     lv_indev_set_display(indev, display);
 
-    if(audio_engine_init(&audio, alsa_device, track_paths) != 0) {
+    if(audio_engine_init(&audio, alsa_device, &playlist) != 0) {
         fprintf(stderr, "Cannot start ALSA playback thread\n");
         close(touch.fd);
         return 1;
     }
     ui.audio = &audio;
+    ui.current_track = initial_track;
+    ui.input_path = input_path;
     ui.view = show_menu ? PLAYER_VIEW_MENU : PLAYER_VIEW_NOW_PLAYING;
     render_view(&ui);
     lv_timer_create(update_timer_cb, UI_REFRESH_MS, &ui);
@@ -1014,7 +1178,7 @@ int main(int argc, char **argv)
     /* Do not let the initial 480x800 render contend with the I2S DMA's first
      * FIFO fill.  Later progress updates only invalidate small screen areas. */
     lv_refr_now(display);
-    audio_engine_select(&audio, 0);
+    audio_engine_select(&audio, initial_track);
 
     printf("LVGL audio player started: fb=%s, input=%s, %ld x %ld, view=%s\n",
            fb_path, input_path,
@@ -1025,8 +1189,16 @@ int main(int argc, char **argv)
            (long)touch.min_x, (long)touch.max_x,
            (long)touch.min_y, (long)touch.max_y);
     printf("ALSA device: %s\n", alsa_device);
-    for(i = 0; i < (int)PLAYLIST_COUNT; ++i)
-        printf("Track %d: %s\n", i + 1, track_paths[i]);
+    printf("Music directory: %s (%u playable WAV file%s)\n",
+           music_directory, playlist.count, playlist.count == 1U ? "" : "s");
+    for(i = 0; i < (int)playlist.count; ++i) {
+        char duration_text[16];
+
+        format_time(duration_text, sizeof(duration_text),
+                    playlist.tracks[i].duration_ms);
+        printf("Track %d: %s [%s]\n", i + 1, playlist.tracks[i].path,
+               duration_text);
+    }
 
     while(running) {
         uint32_t delay_ms = lv_timer_handler();

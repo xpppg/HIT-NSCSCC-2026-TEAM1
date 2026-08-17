@@ -16,6 +16,8 @@ module ps2_host_sim_top (
 );
     tri1 ps2_clk;
     tri1 ps2_data;
+    wire [1:0] error_reason_unused;
+    wire [4:0] tx_edge_count_unused;
 
     assign ps2_clk = dev_clk_low ? 1'b0 : 1'bz;
     assign ps2_data = dev_data_low ? 1'b0 : 1'bz;
@@ -26,6 +28,8 @@ module ps2_host_sim_top (
         .sys_clk(sys_clk), .sys_rst(sys_rst),
         .ps2_clk(ps2_clk), .ps2_data(ps2_data),
         .tx_data(tx_data), .send_req(send_req), .busy(busy),
-        .rx_data(rx_data), .ready(ready), .error(error)
+        .rx_data(rx_data), .ready(ready), .error(error),
+        .error_reason(error_reason_unused),
+        .tx_edge_count(tx_edge_count_unused)
     );
 endmodule

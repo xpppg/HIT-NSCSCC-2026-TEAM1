@@ -32,11 +32,21 @@ module ps2_host #(
     output wire       busy,
     output reg  [7:0] rx_data,
     output reg        ready,
-    output reg        error
+    output reg        error,
+    output reg  [1:0] error_reason,
+    output reg  [4:0] tx_edge_count
 );
+    // The host must hold clock low for at least 100 us before requesting a
+    // transfer.  Once clock is released, a keyboard is allowed several
+    // milliseconds before it starts generating clock pulses, so the old
+    // 0.2-ms watchdog was far too short for real hardware.
     localparam integer INHIBIT_CYCLES = SYS_CLOCK_HZ / 10_000;
-    localparam integer WATCHDOG_CYCLES = SYS_CLOCK_HZ / 5_000;
-    localparam integer TIMER_WIDTH = 16;
+    localparam integer DATA_SETUP_CYCLES = SYS_CLOCK_HZ / 200_000; // 5 us
+    localparam integer WATCHDOG_CYCLES = SYS_CLOCK_HZ / 50; // 20 ms
+    localparam integer TIMER_WIDTH = WATCHDOG_CYCLES < 2 ? 1 :
+                                     $clog2(WATCHDOG_CYCLES + 1);
+    localparam [TIMER_WIDTH-1:0] WATCHDOG_RELOAD =
+        WATCHDOG_CYCLES[TIMER_WIDTH-1:0];
 
     reg [2:0] clk_sync;
     reg [2:0] data_sync;
@@ -58,6 +68,7 @@ module ps2_host #(
     localparam [2:0] TX_REQUEST = 3'd2;
     localparam [2:0] TX_BITS = 3'd3;
     localparam [2:0] TX_ACK = 3'd4;
+    localparam [2:0] TX_DATA_SETUP = 3'd5;
     reg [2:0] tx_state;
     reg [TIMER_WIDTH-1:0] tx_timer;
     reg [3:0] tx_bit;
@@ -76,7 +87,9 @@ module ps2_host #(
             rx_data       <= 8'h00;
             ready         <= 1'b0;
             error         <= 1'b0;
-            watchdog      <= WATCHDOG_CYCLES[TIMER_WIDTH-1:0];
+            error_reason  <= 2'b00;
+            tx_edge_count <= 5'd0;
+            watchdog      <= WATCHDOG_RELOAD;
             tx_state      <= TX_IDLE;
             tx_timer      <= {TIMER_WIDTH{1'b0}};
             tx_bit        <= 4'd0;
@@ -86,9 +99,10 @@ module ps2_host #(
             data_sync <= {data_sync[1:0], ps2_data};
             ready <= 1'b0;
             error <= 1'b0;
+            error_reason <= 2'b00;
 
             if (clk_rise || clk_fall)
-                watchdog <= WATCHDOG_CYCLES[TIMER_WIDTH-1:0];
+                watchdog <= WATCHDOG_RELOAD;
             else if (watchdog != 0)
                 watchdog <= watchdog - 1'b1;
             else begin
@@ -98,6 +112,7 @@ module ps2_host #(
                     clk_drive_low <= 1'b0;
                     data_drive_low <= 1'b0;
                     error <= 1'b1;
+                    error_reason <= 2'b01; // no/insufficient device clocks
                 end
             end
 
@@ -115,6 +130,7 @@ module ps2_host #(
                         ready <= 1'b1;
                     end else begin
                         error <= 1'b1;
+                        error_reason <= 2'b11; // invalid receive frame
                     end
                 end else begin
                     rx_bit <= rx_bit + 1'b1;
@@ -129,6 +145,11 @@ module ps2_host #(
                         // start, data LSB first, odd parity, stop
                         tx_frame <= {1'b1, ~^tx_data, tx_data, 1'b0};
                         tx_timer <= INHIBIT_CYCLES[TIMER_WIDTH-1:0];
+                        // The watchdog normally expires while the bus is
+                        // idle.  Reload it for every new transaction so it
+                        // cannot abort TX immediately after send_req.
+                        watchdog <= WATCHDOG_RELOAD;
+                        tx_edge_count <= 5'd0;
                         clk_drive_low <= 1'b1;
                         tx_state <= TX_INHIBIT;
                     end
@@ -137,34 +158,61 @@ module ps2_host #(
                     if (tx_timer != 0)
                         tx_timer <= tx_timer - 1'b1;
                     else begin
+                        // Request-to-send requires DATA to become low before
+                        // CLOCK is released.  Keep CLOCK inhibited for a
+                        // further 5 us so this ordering is unambiguous at the
+                        // pins and through the board's level shifters.
                         data_drive_low <= 1'b1;
-                        clk_drive_low <= 1'b0;
+                        clk_drive_low <= 1'b1;
+                        tx_timer <= DATA_SETUP_CYCLES[TIMER_WIDTH-1:0];
                         tx_bit <= 4'd0;
+                        tx_state <= TX_DATA_SETUP;
+                    end
+                end
+                TX_DATA_SETUP: begin
+                    if (tx_timer != 0)
+                        tx_timer <= tx_timer - 1'b1;
+                    else begin
+                        clk_drive_low <= 1'b0;
                         tx_state <= TX_REQUEST;
                     end
                 end
                 TX_REQUEST: begin
                     if (clk_fall) begin
-                        data_drive_low <= ~tx_frame[0];
-                        tx_bit <= 4'd1;
+                        tx_edge_count <= tx_edge_count + 1'b1;
+                        // START was already asserted while requesting the
+                        // transfer.  On the first keyboard-generated low
+                        // phase, advance to D0 so the keyboard can sample it
+                        // on the following rising edge.
+                        data_drive_low <= ~tx_frame[1];
+                        tx_bit <= 4'd2;
                         tx_state <= TX_BITS;
                     end
                 end
                 TX_BITS: begin
                     if (clk_fall) begin
-                        if (tx_bit < 4'd11) begin
+                        tx_edge_count <= tx_edge_count + 1'b1;
+                        if (tx_bit < 4'd10) begin
                             data_drive_low <= ~tx_frame[tx_bit];
                             tx_bit <= tx_bit + 1'b1;
                         end else begin
-                            data_drive_low <= 1'b0;
+                            // Present the stop bit during this device clock
+                            // and immediately arm ACK sampling.  A real PS/2
+                            // keyboard supplies exactly one additional clock
+                            // for ACK; waiting another edge here would miss it
+                            // and falsely time out.
+                            data_drive_low <= ~tx_frame[10];
                             tx_state <= TX_ACK;
                         end
                     end
                 end
                 TX_ACK: begin
                     if (clk_fall) begin
-                        if (data_in != 1'b0)
+                        tx_edge_count <= tx_edge_count + 1'b1;
+                        if (data_in != 1'b0) begin
                             error <= 1'b1;
+                            error_reason <= 2'b10; // link-level ACK stayed high
+                        end
                         tx_state <= TX_IDLE;
                     end
                 end

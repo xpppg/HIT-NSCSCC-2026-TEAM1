@@ -148,7 +148,8 @@ module avp_axi_controller (
                     else
                         register_address_valid = address[15:0] == 16'h0000 ||
                             address[15:0] == 16'h0004 || address[15:0] == 16'h0008 ||
-                            address[15:0] == 16'h000c || address[15:0] == 16'hf000 ||
+                            address[15:0] == 16'h000c || address[15:0] == 16'h0010 ||
+                            address[15:0] == 16'hf000 ||
                             address[15:0] == 16'hf004 || address[15:0] == 16'hf008 ||
                             address[15:0] == 16'hf00c;
                 end
@@ -245,6 +246,8 @@ module avp_axi_controller (
     wire [7:0] ps2_rx_data;
     wire ps2_rx_ready;
     wire ps2_host_error;
+    wire [1:0] ps2_error_reason;
+    wire [4:0] ps2_tx_edge_count;
     wire ps2_busy;
     reg [7:0] ps2_tx_data;
     reg ps2_send;
@@ -252,13 +255,15 @@ module avp_axi_controller (
         .sys_clk(aclk), .sys_rst(!aresetn || !ps2_enable),
         .ps2_clk(ps2_clk), .ps2_data(ps2_data),
         .tx_data(ps2_tx_data), .send_req(ps2_send), .busy(ps2_busy),
-        .rx_data(ps2_rx_data), .ready(ps2_rx_ready), .error(ps2_host_error)
+        .rx_data(ps2_rx_data), .ready(ps2_rx_ready), .error(ps2_host_error),
+        .error_reason(ps2_error_reason), .tx_edge_count(ps2_tx_edge_count)
     );
 
     reg [7:0] ps2_fifo [0:15];
     reg [3:0] ps2_wr_ptr;
     reg [3:0] ps2_rd_ptr;
     reg [4:0] ps2_count;
+    reg [1:0] ps2_last_error;
 
     wire [2:0] irq_raw = {
         |vga_status,
@@ -321,6 +326,13 @@ module avp_axi_controller (
                         register_read = {31'b0, ps2_enable};
                     else if (address[15:0] == 16'h000c)
                         register_read = 32'd33000000;
+                    else if (address[15:0] == 16'h0010)
+                        // [9:8] last error: 1=timeout, 2=ACK high,
+                        // 3=bad RX frame; [7:3] TX falling-edge count;
+                        // [2]=busy, [1]=DATA, [0]=CLOCK.
+                        register_read = {22'b0, ps2_last_error,
+                                         ps2_tx_edge_count, ps2_busy,
+                                         ps2_data, ps2_clk};
                     else if (address[15:12] == 4'hf)
                         case (address[3:0])
                             4'h0: register_read = {29'b0, irq_raw};
@@ -348,6 +360,7 @@ module avp_axi_controller (
             vga_ctrl <= 0; vga_fb_addr <= 0; vga_stride <= 32'd1280;
             vga_status <= 0;
             ps2_enable <= 0; ps2_status <= 0; ps2_tx_data <= 0;
+            ps2_last_error <= 0;
             ps2_send <= 0; ps2_wr_ptr <= 0; ps2_rd_ptr <= 0; ps2_count <= 0;
             irq_enable <= 0;
             aw_held <= 0; awid_held <= 0; awaddr_held <= 0; aw_bad <= 0;
@@ -364,7 +377,10 @@ module avp_axi_controller (
             if (i2s_dma_error) i2s_status[2] <= 1'b1;
             if (vga_underflow_event) vga_status[0] <= 1'b1;
             if (vga_dma_error) vga_status[1] <= 1'b1;
-            if (ps2_host_error) ps2_status[0] <= 1'b1;
+            if (ps2_host_error) begin
+                ps2_status[0] <= 1'b1;
+                ps2_last_error <= ps2_error_reason;
+            end
 
             if (ps2_push) begin
                 ps2_fifo[ps2_wr_ptr] <= ps2_rx_data;
@@ -438,6 +454,7 @@ module avp_axi_controller (
                                 if (wdata_held[1]) begin
                                     ps2_wr_ptr <= 0; ps2_rd_ptr <= 0; ps2_count <= 0;
                                     ps2_status <= 0;
+                                    ps2_last_error <= 0;
                                 end
                             end else if (awaddr_held[15:0] == 16'hf004) begin
                                 irq_enable <= wdata_held[2:0];
