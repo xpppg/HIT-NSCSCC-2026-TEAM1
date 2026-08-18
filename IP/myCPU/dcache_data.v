@@ -31,6 +31,7 @@ module dcache_data(
 
     wire [15:0] bank_sel;
     reg [15:0] bank_sel_r;
+    reg [3:0] bank_index_r;
     decoder_4_16 u_decoder_4_16(
     	.in  (offset[5:2]  ),
         .out (bank_sel )
@@ -39,11 +40,13 @@ module dcache_data(
     always @ (posedge clk) begin
         if (rst) begin
             hit_r <= 2'b0;
-            bank_sel_r <= 16'b0;
+            //bank_sel_r <= 16'b0;
+            bank_index_r <= 4'b0;
         end
         else begin
             hit_r <= hit1;
-            bank_sel_r <= bank_sel;
+            //bank_sel_r <= bank_sel;
+            bank_index_r <= offset[5:2];
         end
     end
     
@@ -306,38 +309,9 @@ module dcache_data(
 
     wire [31:0] cpu_rdata_way0,cpu_rdata_way1;
 
-    assign cpu_rdata_way0 = ({32{bank_sel_r[0]}} & rdata_way0[0]) |
-                             ({32{bank_sel_r[1]}} & rdata_way0[1]) |
-                             ({32{bank_sel_r[2]}} & rdata_way0[2]) |
-                             ({32{bank_sel_r[3]}} & rdata_way0[3]) |
-                             ({32{bank_sel_r[4]}} & rdata_way0[4]) |
-                             ({32{bank_sel_r[5]}} & rdata_way0[5]) |
-                             ({32{bank_sel_r[6]}} & rdata_way0[6]) |
-                             ({32{bank_sel_r[7]}} & rdata_way0[7]) |
-                             ({32{bank_sel_r[8]}} & rdata_way0[8]) |
-                             ({32{bank_sel_r[9]}} & rdata_way0[9]) |
-                             ({32{bank_sel_r[10]}} & rdata_way0[10]) |
-                             ({32{bank_sel_r[11]}} & rdata_way0[11]) |
-                             ({32{bank_sel_r[12]}} & rdata_way0[12]) |
-                             ({32{bank_sel_r[13]}} & rdata_way0[13]) |
-                             ({32{bank_sel_r[14]}} & rdata_way0[14]) |
-                             ({32{bank_sel_r[15]}} & rdata_way0[15]);
-    assign cpu_rdata_way1 = ({32{bank_sel_r[0]}} & rdata_way1[0]) |
-                             ({32{bank_sel_r[1]}} & rdata_way1[1]) |
-                             ({32{bank_sel_r[2]}} & rdata_way1[2]) |
-                             ({32{bank_sel_r[3]}} & rdata_way1[3]) |
-                             ({32{bank_sel_r[4]}} & rdata_way1[4]) |
-                             ({32{bank_sel_r[5]}} & rdata_way1[5]) |
-                             ({32{bank_sel_r[6]}} & rdata_way1[6]) |
-                             ({32{bank_sel_r[7]}} & rdata_way1[7]) |
-                             ({32{bank_sel_r[8]}} & rdata_way1[8]) |
-                             ({32{bank_sel_r[9]}} & rdata_way1[9]) |
-                             ({32{bank_sel_r[10]}} & rdata_way1[10]) |
-                             ({32{bank_sel_r[11]}} & rdata_way1[11]) |
-                             ({32{bank_sel_r[12]}} & rdata_way1[12]) |
-                             ({32{bank_sel_r[13]}} & rdata_way1[13]) |
-                             ({32{bank_sel_r[14]}} & rdata_way1[14]) |
-                             ({32{bank_sel_r[15]}} & rdata_way1[15]);
+    assign cpu_rdata_way0 = rdata_way0[bank_index_r];
+    assign cpu_rdata_way1 = rdata_way1[bank_index_r];
+
     assign cpu_rdata = ({32{hit_r[0]}} & cpu_rdata_way0) |
                         ({32{hit_r[1]}} & cpu_rdata_way1);
 
