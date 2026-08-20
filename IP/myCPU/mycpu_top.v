@@ -323,7 +323,7 @@ module core_top(
         .cacheline_r   (icache_cacheline_new_vcache)
     );
 
-    dcache u_dcache(
+    dcache_top u_dcache_top(
         .clk           (clk                  ),
         .rst           (rst                  ),
         .cpu_en        (data_sram_en         ),

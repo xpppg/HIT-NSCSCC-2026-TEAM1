@@ -832,17 +832,27 @@ assign is_src3 = is_r3_sel ? rf_rdata3 : is_imm3;
 assign is_src4 = is_r4_sel ? rf_rdata4 : is_imm4;
 
 
-reg [31:0] ex_alu_src1;
-reg [31:0] ex_alu_src2;
+reg ex_r1_sel;
+reg ex_r2_sel;
+reg ex_r3_sel;
+reg ex_r4_sel;
+wire [31:0] ex_alu_src1;
+wire [31:0] ex_alu_src2;
 reg [18:0] ex_alu_op;
-reg [31:0] ex_alu_src3;
-reg [31:0] ex_alu_src4;
+wire [31:0] ex_alu_src3;
+wire [31:0] ex_alu_src4;
 reg [18:0] ex_alu_op_2;
 reg [31:0] ex_lsu_imm;
 reg [31:0] ex_bru_imm;
 reg [10:0] ex_bru_op;
 reg [31:0] ex_rj_value;
 reg [31:0] ex_rd_value;
+reg [31:0] ex_rj_value_2;
+reg [31:0] ex_rd_value_2;
+reg [31:0] ex_imm1;
+reg [31:0] ex_imm2;
+reg [31:0] ex_imm3;
+reg [31:0] ex_imm4;
 reg [ 9:0] ex_lsu_op;
 reg [18:0] ex_peu_op;
 reg [ 3:0] ex_ctrl_en;
@@ -911,12 +921,16 @@ always @(posedge clk) begin
         ex_pred_info             <= is_pred_info;
 
         ex_alu_op                <= is_alu_op;
-        ex_alu_src1              <= is_src1;
-        ex_alu_src2              <= is_src2;
+        //ex_alu_src1              <= is_src1;
+        //ex_alu_src2              <= is_src2;
         ex_bru_imm               <= is_bru_imm;
         ex_lsu_imm               <= is_imm2;
+        ex_r1_sel                <= is_r1_sel;
+        ex_r2_sel                <= is_r2_sel;
         ex_rj_value              <= rf_rdata1;
         ex_rd_value              <= rf_rdata2;
+        ex_imm1                  <= is_imm1;
+        ex_imm2                  <= is_imm2;
         ex_ctrl_en               <= is_ctrl_en;
         ex_bru_op                <= is_bru_op;
         ex_lsu_op                <= is_lsu_op;
@@ -939,12 +953,16 @@ always @(posedge clk) begin
         ex_pred_info             <= is_pred_info_2;
 
         ex_alu_op                <= is_alu_op_2;
-        ex_alu_src1              <= is_src3;
-        ex_alu_src2              <= is_src4;
+        //ex_alu_src1              <= is_src3;
+        //ex_alu_src2              <= is_src4;
         ex_bru_imm               <= is_bru_imm_2;
         ex_lsu_imm               <= is_imm4;
+        ex_r1_sel                <= is_r3_sel;
+        ex_r2_sel                <= is_r4_sel;
         ex_rj_value              <= rf_rdata3;
         ex_rd_value              <= rf_rdata4;
+        ex_imm1                  <= is_imm3;
+        ex_imm2                  <= is_imm4;
         ex_ctrl_en               <= is_ctrl_en_2;
         ex_bru_op                <= is_bru_op_2;
         ex_lsu_op                <= is_lsu_op_2;
@@ -975,8 +993,14 @@ always @(posedge clk) begin
         EXE_inst2          <= IS_inst;
         
         ex_alu_op_2        <= is_alu_op;
-        ex_alu_src3        <= is_src1;
-        ex_alu_src4        <= is_src2;
+        //ex_alu_src3        <= is_src1;
+        //ex_alu_src4        <= is_src2;
+        ex_r3_sel          <= is_r1_sel;
+        ex_r4_sel          <= is_r2_sel;
+        ex_rj_value_2      <= rf_rdata1;
+        ex_rd_value_2      <= rf_rdata2;
+        ex_imm3            <= is_imm1;
+        ex_imm4            <= is_imm2;
         ex_dest_2          <= is_dest;
         ex_dest_we_2       <= is_dest_we;
         ex_dest_from_2     <= is_dest_from;
@@ -988,8 +1012,14 @@ always @(posedge clk) begin
         EXE_inst2          <= IS_inst2;
 
         ex_alu_op_2        <= is_alu_op_2;
-        ex_alu_src3        <= is_src3;
-        ex_alu_src4        <= is_src4;
+        //ex_alu_src3        <= is_src3;
+        //ex_alu_src4        <= is_src4;
+        ex_r3_sel          <= is_r3_sel;
+        ex_r4_sel          <= is_r4_sel;
+        ex_rj_value_2      <= rf_rdata3;
+        ex_rd_value_2      <= rf_rdata4;
+        ex_imm3            <= is_imm3;
+        ex_imm4            <= is_imm4;
         ex_dest_2          <= is_dest_2;
         ex_dest_we_2       <= is_dest_we_2;
         ex_dest_from_2     <= is_dest_from_2;
@@ -998,6 +1028,11 @@ always @(posedge clk) begin
         sub_EXE_valid <= 1'b0;
     end
 end
+
+assign ex_alu_src1 = ex_r1_sel ? ex_rj_value : ex_imm1;
+assign ex_alu_src2 = ex_r2_sel ? ex_rd_value : ex_imm2;
+assign ex_alu_src3 = ex_r3_sel ? ex_rj_value_2 : ex_imm3;
+assign ex_alu_src4 = ex_r4_sel ? ex_rd_value_2 : ex_imm4;
 
 
 alu u_alu1(

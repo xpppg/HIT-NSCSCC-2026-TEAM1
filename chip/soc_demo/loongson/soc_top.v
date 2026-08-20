@@ -111,12 +111,47 @@ module soc_top(
     output        SPI_CLK,
     output        SPI_CS,
     inout         SPI_MISO,
-    inout         SPI_MOSI
+    inout         SPI_MOSI,
+
+    //------16-bit 8080 LCD interface------
+    output        lcd_cs_n,
+    output        lcd_wr_n,
+    output        lcd_rd_n,
+    output        lcd_rs,
+    output        lcd_rst_n,
+    inout  [15:0] lcd_db,
+    output        lcd_bl_ctr,
+
+    //------ALIENTEK capacitive touch------
+    inout         touch_scl,
+    inout         touch_sda,
+    inout         touch_int,
+    output        touch_rst_n,
+
+    //------VGA RGB444 output------
+    output [3:0]  vga_r,
+    output [3:0]  vga_g,
+    output [3:0]  vga_b,
+    output        vga_hsync,
+    output        vga_vsync,
+
+    //------native PS/2 connector------
+    inout         ps2_clk,
+    inout         ps2_data,
+
+    //------external MAX98357A------
+    output        i2s_bclk,
+    output        i2s_lrclk,
+    output        i2s_data
 );
 wire        aclk;
 wire        aresetn;
 wire        cpu_clk;
 wire        uncore_clk;
+wire        vga_pix_clk;
+wire        vga_clk_locked;
+wire        i2s_audio_clk;
+wire        i2s_clk_locked;
 
 wire [`LID         -1 :0] m0_awid;
 wire [`Lawaddr     -1 :0] m0_awaddr;
@@ -303,6 +338,121 @@ wire                      mac_s_rlast;
 wire                      mac_s_rvalid;
 wire                      mac_s_rready;
 
+wire [`LID         -1 :0] lcd_s_awid;
+wire [`Lawaddr     -1 :0] lcd_s_awaddr;
+wire [`Lawlen      -1 :0] lcd_s_awlen;
+wire [`Lawsize     -1 :0] lcd_s_awsize;
+wire [`Lawburst    -1 :0] lcd_s_awburst;
+wire [`Lawlock     -1 :0] lcd_s_awlock;
+wire [`Lawcache    -1 :0] lcd_s_awcache;
+wire [`Lawprot     -1 :0] lcd_s_awprot;
+wire                      lcd_s_awvalid;
+wire                      lcd_s_awready;
+wire [`LID         -1 :0] lcd_s_wid;
+wire [`Lwdata      -1 :0] lcd_s_wdata;
+wire [`Lwstrb      -1 :0] lcd_s_wstrb;
+wire                      lcd_s_wlast;
+wire                      lcd_s_wvalid;
+wire                      lcd_s_wready;
+wire [`LID         -1 :0] lcd_s_bid;
+wire [`Lbresp      -1 :0] lcd_s_bresp;
+wire                      lcd_s_bvalid;
+wire                      lcd_s_bready;
+wire [`LID         -1 :0] lcd_s_arid;
+wire [`Laraddr     -1 :0] lcd_s_araddr;
+wire [`Larlen      -1 :0] lcd_s_arlen;
+wire [`Larsize     -1 :0] lcd_s_arsize;
+wire [`Larburst    -1 :0] lcd_s_arburst;
+wire [`Larlock     -1 :0] lcd_s_arlock;
+wire [`Larcache    -1 :0] lcd_s_arcache;
+wire [`Larprot     -1 :0] lcd_s_arprot;
+wire                      lcd_s_arvalid;
+wire                      lcd_s_arready;
+wire [`LID         -1 :0] lcd_s_rid;
+wire [`Lrdata      -1 :0] lcd_s_rdata;
+wire [`Lrresp      -1 :0] lcd_s_rresp;
+wire                      lcd_s_rlast;
+wire                      lcd_s_rvalid;
+wire                      lcd_s_rready;
+
+wire [`LID         -1 :0] i2c_s_awid;
+wire [`Lawaddr     -1 :0] i2c_s_awaddr;
+wire [`Lawlen      -1 :0] i2c_s_awlen;
+wire [`Lawsize     -1 :0] i2c_s_awsize;
+wire [`Lawburst    -1 :0] i2c_s_awburst;
+wire [`Lawlock     -1 :0] i2c_s_awlock;
+wire [`Lawcache    -1 :0] i2c_s_awcache;
+wire [`Lawprot     -1 :0] i2c_s_awprot;
+wire                      i2c_s_awvalid;
+wire                      i2c_s_awready;
+wire [`LID         -1 :0] i2c_s_wid;
+wire [`Lwdata      -1 :0] i2c_s_wdata;
+wire [`Lwstrb      -1 :0] i2c_s_wstrb;
+wire                      i2c_s_wlast;
+wire                      i2c_s_wvalid;
+wire                      i2c_s_wready;
+wire [`LID         -1 :0] i2c_s_bid;
+wire [`Lbresp      -1 :0] i2c_s_bresp;
+wire                      i2c_s_bvalid;
+wire                      i2c_s_bready;
+wire [`LID         -1 :0] i2c_s_arid;
+wire [`Laraddr     -1 :0] i2c_s_araddr;
+wire [`Larlen      -1 :0] i2c_s_arlen;
+wire [`Larsize     -1 :0] i2c_s_arsize;
+wire [`Larburst    -1 :0] i2c_s_arburst;
+wire [`Larlock     -1 :0] i2c_s_arlock;
+wire [`Larcache    -1 :0] i2c_s_arcache;
+wire [`Larprot     -1 :0] i2c_s_arprot;
+wire                      i2c_s_arvalid;
+wire                      i2c_s_arready;
+wire [`LID         -1 :0] i2c_s_rid;
+wire [`Lrdata      -1 :0] i2c_s_rdata;
+wire [`Lrresp      -1 :0] i2c_s_rresp;
+wire                      i2c_s_rlast;
+wire                      i2c_s_rvalid;
+wire                      i2c_s_rready;
+wire                      i2c_irq;
+wire                      touch_irq;
+
+// Unified multimedia register slave (0x1fa2_0000--0x1fa4_ffff).
+wire [`LID         -1 :0] avp_s_awid;
+wire [`Lawaddr     -1 :0] avp_s_awaddr;
+wire [`Lawlen      -1 :0] avp_s_awlen;
+wire [`Lawsize     -1 :0] avp_s_awsize;
+wire [`Lawburst    -1 :0] avp_s_awburst;
+wire [`Lawlock     -1 :0] avp_s_awlock;
+wire [`Lawcache    -1 :0] avp_s_awcache;
+wire [`Lawprot     -1 :0] avp_s_awprot;
+wire                      avp_s_awvalid;
+wire                      avp_s_awready;
+wire [`LID         -1 :0] avp_s_wid;
+wire [`Lwdata      -1 :0] avp_s_wdata;
+wire [`Lwstrb      -1 :0] avp_s_wstrb;
+wire                      avp_s_wlast;
+wire                      avp_s_wvalid;
+wire                      avp_s_wready;
+wire [`LID         -1 :0] avp_s_bid;
+wire [`Lbresp      -1 :0] avp_s_bresp;
+wire                      avp_s_bvalid;
+wire                      avp_s_bready;
+wire [`LID         -1 :0] avp_s_arid;
+wire [`Laraddr     -1 :0] avp_s_araddr;
+wire [`Larlen      -1 :0] avp_s_arlen;
+wire [`Larsize     -1 :0] avp_s_arsize;
+wire [`Larburst    -1 :0] avp_s_arburst;
+wire [`Larlock     -1 :0] avp_s_arlock;
+wire [`Larcache    -1 :0] avp_s_arcache;
+wire [`Larprot     -1 :0] avp_s_arprot;
+wire                      avp_s_arvalid;
+wire                      avp_s_arready;
+wire [`LID         -1 :0] avp_s_rid;
+wire [`Lrdata      -1 :0] avp_s_rdata;
+wire [`Lrresp      -1 :0] avp_s_rresp;
+wire                      avp_s_rlast;
+wire                      avp_s_rvalid;
+wire                      avp_s_rready;
+wire                      media_irq;
+
 wire [`LID         -1 :0] mac_m_awid;
 wire [`Lawaddr     -1 :0] mac_m_awaddr;
 wire [`Lawlen      -1 :0] mac_m_awlen;
@@ -451,6 +601,60 @@ wire                      dma0_rlast      ;
 wire                      dma0_rvalid     ;
 wire                      dma0_rready     ;
 
+// LCD framebuffer DMA read master (64-bit AXI, one read burst at a time).
+wire [3:0]                lcd_dma_arid;
+wire [31:0]               lcd_dma_araddr;
+wire [3:0]                lcd_dma_arlen;
+wire [2:0]                lcd_dma_arsize;
+wire [1:0]                lcd_dma_arburst;
+wire [1:0]                lcd_dma_arlock;
+wire [3:0]                lcd_dma_arcache;
+wire [2:0]                lcd_dma_arprot;
+wire                      lcd_dma_arvalid;
+wire                      lcd_dma_arready;
+wire [3:0]                lcd_dma_rid;
+wire [63:0]               lcd_dma_rdata;
+wire [1:0]                lcd_dma_rresp;
+wire                      lcd_dma_rlast;
+wire                      lcd_dma_rvalid;
+wire                      lcd_dma_rready;
+wire                      lcd_dma_irq;
+
+// I2S and VGA independent read-only, 64-bit AXI DMA masters.
+wire [3:0]                i2s_dma_arid;
+wire [31:0]               i2s_dma_araddr;
+wire [3:0]                i2s_dma_arlen;
+wire [2:0]                i2s_dma_arsize;
+wire [1:0]                i2s_dma_arburst;
+wire [1:0]                i2s_dma_arlock;
+wire [3:0]                i2s_dma_arcache;
+wire [2:0]                i2s_dma_arprot;
+wire                      i2s_dma_arvalid;
+wire                      i2s_dma_arready;
+wire [3:0]                i2s_dma_rid;
+wire [63:0]               i2s_dma_rdata;
+wire [1:0]                i2s_dma_rresp;
+wire                      i2s_dma_rlast;
+wire                      i2s_dma_rvalid;
+wire                      i2s_dma_rready;
+
+wire [3:0]                vga_dma_arid;
+wire [31:0]               vga_dma_araddr;
+wire [3:0]                vga_dma_arlen;
+wire [2:0]                vga_dma_arsize;
+wire [1:0]                vga_dma_arburst;
+wire [1:0]                vga_dma_arlock;
+wire [3:0]                vga_dma_arcache;
+wire [2:0]                vga_dma_arprot;
+wire                      vga_dma_arvalid;
+wire                      vga_dma_arready;
+wire [3:0]                vga_dma_rid;
+wire [63:0]               vga_dma_rdata;
+wire [1:0]                vga_dma_rresp;
+wire                      vga_dma_rlast;
+wire                      vga_dma_rvalid;
+wire                      vga_dma_rready;
+
 wire [`LID         -1 :0] apb_s_awid;
 wire [`Lawaddr     -1 :0] apb_s_awaddr;
 wire [`Lawlen      -1 :0] apb_s_awlen;
@@ -592,9 +796,16 @@ assign     uart0_ri_i  = UART_RI ;
 
 //interrupt
 wire mac_int;
-wire [5:0] int_out;
-wire [5:0] int_n_i;
-assign int_out = {1'b0,dma_int,nand_int,spi_inta_o,uart0_int,mac_int};
+wire [7:0] int_out;
+wire [7:0] int_n_i;
+// LoongArch core_top exposes all eight hardware interrupt inputs.  Goodix INT
+// is an active-low, open-drain signal and is converted to an active-high CPU
+// interrupt here.  The general-purpose DMA and LCD DMA share bit 4; each has
+// an independent status/acknowledge register.  Multimedia is cascaded on bit
+// 7, which the LoongArch Linux irqchip exposes as CPU hwirq 9.
+assign touch_irq = ~touch_int;
+assign int_out = {media_irq,touch_irq,i2c_irq,(dma_int | lcd_dma_irq),
+                  nand_int,spi_inta_o,uart0_int,mac_int};
 assign int_n_i = ~int_out;
 
 reg cpu_aresetn_1;
@@ -722,7 +933,7 @@ debug_sram u_debug_sram(
 // cpu
 core_top cpu_mid(
   .aclk             (cpu_clk),
-  .intrpt           ({3'b0, int_out[4:0]}),  //232 only 5bit
+  .intrpt           (int_out),
   //.nmi              (1'b1),
 
   .aresetn          (cpu_aresetn  ),
@@ -1216,6 +1427,117 @@ axi_slave_mux AXI_SLAVE_MUX
 .s4_rvalid         (mac_s_rvalid       ),
 .s4_rready         (mac_s_rready       ),
 
+.s5_awid           (lcd_s_awid         ),
+.s5_awaddr         (lcd_s_awaddr       ),
+.s5_awlen          (lcd_s_awlen        ),
+.s5_awsize         (lcd_s_awsize       ),
+.s5_awburst        (lcd_s_awburst      ),
+.s5_awlock         (lcd_s_awlock       ),
+.s5_awcache        (lcd_s_awcache      ),
+.s5_awprot         (lcd_s_awprot       ),
+.s5_awvalid        (lcd_s_awvalid      ),
+.s5_awready        (lcd_s_awready      ),
+.s5_wid            (lcd_s_wid          ),
+.s5_wdata          (lcd_s_wdata        ),
+.s5_wstrb          (lcd_s_wstrb        ),
+.s5_wlast          (lcd_s_wlast        ),
+.s5_wvalid         (lcd_s_wvalid       ),
+.s5_wready         (lcd_s_wready       ),
+.s5_bid            (lcd_s_bid          ),
+.s5_bresp          (lcd_s_bresp        ),
+.s5_bvalid         (lcd_s_bvalid       ),
+.s5_bready         (lcd_s_bready       ),
+.s5_arid           (lcd_s_arid         ),
+.s5_araddr         (lcd_s_araddr       ),
+.s5_arlen          (lcd_s_arlen        ),
+.s5_arsize         (lcd_s_arsize       ),
+.s5_arburst        (lcd_s_arburst      ),
+.s5_arlock         (lcd_s_arlock       ),
+.s5_arcache        (lcd_s_arcache      ),
+.s5_arprot         (lcd_s_arprot       ),
+.s5_arvalid        (lcd_s_arvalid      ),
+.s5_arready        (lcd_s_arready      ),
+.s5_rid            (lcd_s_rid          ),
+.s5_rdata          (lcd_s_rdata        ),
+.s5_rresp          (lcd_s_rresp        ),
+.s5_rlast          (lcd_s_rlast        ),
+.s5_rvalid         (lcd_s_rvalid       ),
+.s5_rready         (lcd_s_rready       ),
+
+.s6_awid           (i2c_s_awid         ),
+.s6_awaddr         (i2c_s_awaddr       ),
+.s6_awlen          (i2c_s_awlen        ),
+.s6_awsize         (i2c_s_awsize       ),
+.s6_awburst        (i2c_s_awburst      ),
+.s6_awlock         (i2c_s_awlock       ),
+.s6_awcache        (i2c_s_awcache      ),
+.s6_awprot         (i2c_s_awprot       ),
+.s6_awvalid        (i2c_s_awvalid      ),
+.s6_awready        (i2c_s_awready      ),
+.s6_wid            (i2c_s_wid          ),
+.s6_wdata          (i2c_s_wdata        ),
+.s6_wstrb          (i2c_s_wstrb        ),
+.s6_wlast          (i2c_s_wlast        ),
+.s6_wvalid         (i2c_s_wvalid       ),
+.s6_wready         (i2c_s_wready       ),
+.s6_bid            (i2c_s_bid          ),
+.s6_bresp          (i2c_s_bresp        ),
+.s6_bvalid         (i2c_s_bvalid       ),
+.s6_bready         (i2c_s_bready       ),
+.s6_arid           (i2c_s_arid         ),
+.s6_araddr         (i2c_s_araddr       ),
+.s6_arlen          (i2c_s_arlen        ),
+.s6_arsize         (i2c_s_arsize       ),
+.s6_arburst        (i2c_s_arburst      ),
+.s6_arlock         (i2c_s_arlock       ),
+.s6_arcache        (i2c_s_arcache      ),
+.s6_arprot         (i2c_s_arprot       ),
+.s6_arvalid        (i2c_s_arvalid      ),
+.s6_arready        (i2c_s_arready      ),
+.s6_rid            (i2c_s_rid          ),
+.s6_rdata          (i2c_s_rdata        ),
+.s6_rresp          (i2c_s_rresp        ),
+.s6_rlast          (i2c_s_rlast        ),
+.s6_rvalid         (i2c_s_rvalid       ),
+.s6_rready         (i2c_s_rready       ),
+
+.s7_awid           (avp_s_awid         ),
+.s7_awaddr         (avp_s_awaddr       ),
+.s7_awlen          (avp_s_awlen        ),
+.s7_awsize         (avp_s_awsize       ),
+.s7_awburst        (avp_s_awburst      ),
+.s7_awlock         (avp_s_awlock       ),
+.s7_awcache        (avp_s_awcache      ),
+.s7_awprot         (avp_s_awprot       ),
+.s7_awvalid        (avp_s_awvalid      ),
+.s7_awready        (avp_s_awready      ),
+.s7_wid            (avp_s_wid          ),
+.s7_wdata          (avp_s_wdata        ),
+.s7_wstrb          (avp_s_wstrb        ),
+.s7_wlast          (avp_s_wlast        ),
+.s7_wvalid         (avp_s_wvalid       ),
+.s7_wready         (avp_s_wready       ),
+.s7_bid            (avp_s_bid          ),
+.s7_bresp          (avp_s_bresp        ),
+.s7_bvalid         (avp_s_bvalid       ),
+.s7_bready         (avp_s_bready       ),
+.s7_arid           (avp_s_arid         ),
+.s7_araddr         (avp_s_araddr       ),
+.s7_arlen          (avp_s_arlen        ),
+.s7_arsize         (avp_s_arsize       ),
+.s7_arburst        (avp_s_arburst      ),
+.s7_arlock         (avp_s_arlock       ),
+.s7_arcache        (avp_s_arcache      ),
+.s7_arprot         (avp_s_arprot       ),
+.s7_arvalid        (avp_s_arvalid      ),
+.s7_arready        (avp_s_arready      ),
+.s7_rid            (avp_s_rid          ),
+.s7_rdata          (avp_s_rdata        ),
+.s7_rresp          (avp_s_rresp        ),
+.s7_rlast          (avp_s_rlast        ),
+.s7_rvalid         (avp_s_rvalid       ),
+.s7_rready         (avp_s_rready       ),
+
 .axi_s_aclk        (aclk                )
 );
 
@@ -1472,6 +1794,23 @@ clk_wiz_0  clk_pll_1
     .clk_in1(clk)             //100MHz
 );
 
+// These two Clocking Wizard instances are intentionally separate from the
+// CPU/uncore PLLs.  Generate them manually in Vivado with the exact module
+// names and interfaces below.
+clk_wiz_vga vga_clock_generator (
+    .clk_out1(vga_pix_clk),    // 25.2 MHz
+    .reset(~resetn),
+    .locked(vga_clk_locked),
+    .clk_in1(clk)              // 100 MHz
+);
+
+clk_wiz_i2s i2s_clock_generator (
+    .clk_out1(i2s_audio_clk),  // 22.5792 MHz
+    .reset(~resetn),
+    .locked(i2s_clk_locked),
+    .clk_in1(clk)              // 100 MHz
+);
+
 assign c1_sys_clk_i      = clk;
 assign c1_sys_rst_i      = resetn;
 assign aclk              = uncore_clk;
@@ -1620,6 +1959,130 @@ axi_interconnect_0 mig_axi_interconnect (
     .S02_AXI_RLAST        (dma0_rlast          ),
     .S02_AXI_RVALID       (dma0_rvalid         ),
     .S02_AXI_RREADY       (dma0_rready         ),
+
+    // Dedicated read-only 64-bit input for the LCD framebuffer DMA.  The
+    // generated wrapper retains write pins even in READ-ONLY mode, so all
+    // write request inputs are tied inactive explicitly.
+    .S03_AXI_ARESET_OUT_N (                    ),
+    .S03_AXI_ACLK         (aclk                ),
+    .S03_AXI_AWID         (4'b0                ),
+    .S03_AXI_AWADDR       (32'b0               ),
+    .S03_AXI_AWLEN        (8'b0                ),
+    .S03_AXI_AWSIZE       (3'b0                ),
+    .S03_AXI_AWBURST      (2'b0                ),
+    .S03_AXI_AWLOCK       (1'b0                ),
+    .S03_AXI_AWCACHE      (4'b0                ),
+    .S03_AXI_AWPROT       (3'b0                ),
+    .S03_AXI_AWQOS        (4'b0                ),
+    .S03_AXI_AWVALID      (1'b0                ),
+    .S03_AXI_AWREADY      (                    ),
+    .S03_AXI_WDATA        (64'b0               ),
+    .S03_AXI_WSTRB        (8'b0                ),
+    .S03_AXI_WLAST        (1'b1                ),
+    .S03_AXI_WVALID       (1'b0                ),
+    .S03_AXI_WREADY       (                    ),
+    .S03_AXI_BID          (                    ),
+    .S03_AXI_BRESP        (                    ),
+    .S03_AXI_BVALID       (                    ),
+    .S03_AXI_BREADY       (1'b1                ),
+    .S03_AXI_ARID         (lcd_dma_arid        ),
+    .S03_AXI_ARADDR       (lcd_dma_araddr      ),
+    .S03_AXI_ARLEN        ({4'b0,lcd_dma_arlen}),
+    .S03_AXI_ARSIZE       (lcd_dma_arsize      ),
+    .S03_AXI_ARBURST      (lcd_dma_arburst     ),
+    .S03_AXI_ARLOCK       (lcd_dma_arlock[0]   ),
+    .S03_AXI_ARCACHE      (lcd_dma_arcache     ),
+    .S03_AXI_ARPROT       (lcd_dma_arprot      ),
+    .S03_AXI_ARQOS        (4'b0                ),
+    .S03_AXI_ARVALID      (lcd_dma_arvalid     ),
+    .S03_AXI_ARREADY      (lcd_dma_arready     ),
+    .S03_AXI_RID          (lcd_dma_rid         ),
+    .S03_AXI_RDATA        (lcd_dma_rdata       ),
+    .S03_AXI_RRESP        (lcd_dma_rresp       ),
+    .S03_AXI_RLAST        (lcd_dma_rlast       ),
+    .S03_AXI_RVALID       (lcd_dma_rvalid      ),
+    .S03_AXI_RREADY       (lcd_dma_rready      ),
+
+    // Add S04/S05 manually to axi_interconnect_0 as 64-bit READ_ONLY ports.
+    .S04_AXI_ARESET_OUT_N (                    ),
+    .S04_AXI_ACLK         (aclk                ),
+    .S04_AXI_AWID         (4'b0                ),
+    .S04_AXI_AWADDR       (32'b0               ),
+    .S04_AXI_AWLEN        (8'b0                ),
+    .S04_AXI_AWSIZE       (3'b0                ),
+    .S04_AXI_AWBURST      (2'b0                ),
+    .S04_AXI_AWLOCK       (1'b0                ),
+    .S04_AXI_AWCACHE      (4'b0                ),
+    .S04_AXI_AWPROT       (3'b0                ),
+    .S04_AXI_AWQOS        (4'b0                ),
+    .S04_AXI_AWVALID      (1'b0                ),
+    .S04_AXI_AWREADY      (                    ),
+    .S04_AXI_WDATA        (64'b0               ),
+    .S04_AXI_WSTRB        (8'b0                ),
+    .S04_AXI_WLAST        (1'b1                ),
+    .S04_AXI_WVALID       (1'b0                ),
+    .S04_AXI_WREADY       (                    ),
+    .S04_AXI_BID          (                    ),
+    .S04_AXI_BRESP        (                    ),
+    .S04_AXI_BVALID       (                    ),
+    .S04_AXI_BREADY       (1'b1                ),
+    .S04_AXI_ARID         (i2s_dma_arid        ),
+    .S04_AXI_ARADDR       (i2s_dma_araddr      ),
+    .S04_AXI_ARLEN        ({4'b0,i2s_dma_arlen}),
+    .S04_AXI_ARSIZE       (i2s_dma_arsize      ),
+    .S04_AXI_ARBURST      (i2s_dma_arburst     ),
+    .S04_AXI_ARLOCK       (i2s_dma_arlock[0]   ),
+    .S04_AXI_ARCACHE      (i2s_dma_arcache     ),
+    .S04_AXI_ARPROT       (i2s_dma_arprot      ),
+    .S04_AXI_ARQOS        (4'b0                ),
+    .S04_AXI_ARVALID      (i2s_dma_arvalid     ),
+    .S04_AXI_ARREADY      (i2s_dma_arready     ),
+    .S04_AXI_RID          (i2s_dma_rid         ),
+    .S04_AXI_RDATA        (i2s_dma_rdata       ),
+    .S04_AXI_RRESP        (i2s_dma_rresp       ),
+    .S04_AXI_RLAST        (i2s_dma_rlast       ),
+    .S04_AXI_RVALID       (i2s_dma_rvalid      ),
+    .S04_AXI_RREADY       (i2s_dma_rready      ),
+
+    .S05_AXI_ARESET_OUT_N (                    ),
+    .S05_AXI_ACLK         (aclk                ),
+    .S05_AXI_AWID         (4'b0                ),
+    .S05_AXI_AWADDR       (32'b0               ),
+    .S05_AXI_AWLEN        (8'b0                ),
+    .S05_AXI_AWSIZE       (3'b0                ),
+    .S05_AXI_AWBURST      (2'b0                ),
+    .S05_AXI_AWLOCK       (1'b0                ),
+    .S05_AXI_AWCACHE      (4'b0                ),
+    .S05_AXI_AWPROT       (3'b0                ),
+    .S05_AXI_AWQOS        (4'b0                ),
+    .S05_AXI_AWVALID      (1'b0                ),
+    .S05_AXI_AWREADY      (                    ),
+    .S05_AXI_WDATA        (64'b0               ),
+    .S05_AXI_WSTRB        (8'b0                ),
+    .S05_AXI_WLAST        (1'b1                ),
+    .S05_AXI_WVALID       (1'b0                ),
+    .S05_AXI_WREADY       (                    ),
+    .S05_AXI_BID          (                    ),
+    .S05_AXI_BRESP        (                    ),
+    .S05_AXI_BVALID       (                    ),
+    .S05_AXI_BREADY       (1'b1                ),
+    .S05_AXI_ARID         (vga_dma_arid        ),
+    .S05_AXI_ARADDR       (vga_dma_araddr      ),
+    .S05_AXI_ARLEN        ({4'b0,vga_dma_arlen}),
+    .S05_AXI_ARSIZE       (vga_dma_arsize      ),
+    .S05_AXI_ARBURST      (vga_dma_arburst     ),
+    .S05_AXI_ARLOCK       (vga_dma_arlock[0]   ),
+    .S05_AXI_ARCACHE      (vga_dma_arcache     ),
+    .S05_AXI_ARPROT       (vga_dma_arprot      ),
+    .S05_AXI_ARQOS        (4'b0                ),
+    .S05_AXI_ARVALID      (vga_dma_arvalid     ),
+    .S05_AXI_ARREADY      (vga_dma_arready     ),
+    .S05_AXI_RID          (vga_dma_rid         ),
+    .S05_AXI_RDATA        (vga_dma_rdata       ),
+    .S05_AXI_RRESP        (vga_dma_rresp       ),
+    .S05_AXI_RLAST        (vga_dma_rlast       ),
+    .S05_AXI_RVALID       (vga_dma_rvalid      ),
+    .S05_AXI_RREADY       (vga_dma_rready      ),
 
     .M00_AXI_ARESET_OUT_N (ddr_aresetn         ),
     .M00_AXI_ACLK         (c1_clk0             ),
@@ -1880,5 +2343,231 @@ axi2apb_misc APB_DEV
 
 .nand_int           (nand_int         )
 );
-endmodule
 
+// LCD controller: physical 0x1fa0_0000, normally accessed through the
+// uncached MIPS alias at 0xbfa0_0000.
+lcd_axi_controller #(
+    .AXI_ID_WIDTH   (`LID),
+    .AXI_ADDR_WIDTH (`Lawaddr),
+    .AXI_DATA_WIDTH (`Lwdata),
+    .AXI_LEN_WIDTH  (`Lawlen)
+) LCD (
+    .s_axi_aclk     (aclk          ),
+    .s_axi_aresetn  (aresetn       ),
+
+    .s_axi_awid     (lcd_s_awid    ),
+    .s_axi_awaddr   (lcd_s_awaddr  ),
+    .s_axi_awlen    (lcd_s_awlen   ),
+    .s_axi_awsize   (lcd_s_awsize  ),
+    .s_axi_awburst  (lcd_s_awburst ),
+    .s_axi_awlock   (lcd_s_awlock  ),
+    .s_axi_awcache  (lcd_s_awcache ),
+    .s_axi_awprot   (lcd_s_awprot  ),
+    .s_axi_awvalid  (lcd_s_awvalid ),
+    .s_axi_awready  (lcd_s_awready ),
+
+    .s_axi_wid      (lcd_s_wid     ),
+    .s_axi_wdata    (lcd_s_wdata   ),
+    .s_axi_wstrb    (lcd_s_wstrb   ),
+    .s_axi_wlast    (lcd_s_wlast   ),
+    .s_axi_wvalid   (lcd_s_wvalid  ),
+    .s_axi_wready   (lcd_s_wready  ),
+
+    .s_axi_bid      (lcd_s_bid     ),
+    .s_axi_bresp    (lcd_s_bresp   ),
+    .s_axi_bvalid   (lcd_s_bvalid  ),
+    .s_axi_bready   (lcd_s_bready  ),
+
+    .s_axi_arid     (lcd_s_arid    ),
+    .s_axi_araddr   (lcd_s_araddr  ),
+    .s_axi_arlen    (lcd_s_arlen   ),
+    .s_axi_arsize   (lcd_s_arsize  ),
+    .s_axi_arburst  (lcd_s_arburst ),
+    .s_axi_arlock   (lcd_s_arlock  ),
+    .s_axi_arcache  (lcd_s_arcache ),
+    .s_axi_arprot   (lcd_s_arprot  ),
+    .s_axi_arvalid  (lcd_s_arvalid ),
+    .s_axi_arready  (lcd_s_arready ),
+
+    .s_axi_rid      (lcd_s_rid     ),
+    .s_axi_rdata    (lcd_s_rdata   ),
+    .s_axi_rresp    (lcd_s_rresp   ),
+    .s_axi_rlast    (lcd_s_rlast   ),
+    .s_axi_rvalid   (lcd_s_rvalid  ),
+    .s_axi_rready   (lcd_s_rready  ),
+
+    .m_axi_arid     (lcd_dma_arid   ),
+    .m_axi_araddr   (lcd_dma_araddr ),
+    .m_axi_arlen    (lcd_dma_arlen  ),
+    .m_axi_arsize   (lcd_dma_arsize ),
+    .m_axi_arburst  (lcd_dma_arburst),
+    .m_axi_arlock   (lcd_dma_arlock ),
+    .m_axi_arcache  (lcd_dma_arcache),
+    .m_axi_arprot   (lcd_dma_arprot ),
+    .m_axi_arvalid  (lcd_dma_arvalid),
+    .m_axi_arready  (lcd_dma_arready),
+    .m_axi_rid      (lcd_dma_rid     ),
+    .m_axi_rdata    (lcd_dma_rdata   ),
+    .m_axi_rresp    (lcd_dma_rresp   ),
+    .m_axi_rlast    (lcd_dma_rlast   ),
+    .m_axi_rvalid   (lcd_dma_rvalid  ),
+    .m_axi_rready   (lcd_dma_rready  ),
+    .dma_irq        (lcd_dma_irq     ),
+
+    .lcd_cs_n       (lcd_cs_n      ),
+    .lcd_wr_n       (lcd_wr_n      ),
+    .lcd_rd_n       (lcd_rd_n      ),
+    .lcd_rs         (lcd_rs        ),
+    .lcd_rst_n      (lcd_rst_n     ),
+    .lcd_db         (lcd_db        ),
+    .lcd_bl_ctr     (lcd_bl_ctr    )
+);
+
+// OpenCores I2C master: physical 0x1fa1_0000.  Its registers are presented
+// with a four-byte stride for direct use by the Linux i2c-ocores driver.
+axi_i2c_ocores #(
+    .AXI_ID_WIDTH   (`LID),
+    .AXI_ADDR_WIDTH (`Lawaddr),
+    .AXI_DATA_WIDTH (`Lwdata),
+    .AXI_LEN_WIDTH  (`Lawlen)
+) TOUCH_I2C (
+    .s_axi_aclk     (aclk),
+    .s_axi_aresetn  (aresetn),
+    .s_axi_awid     (i2c_s_awid),
+    .s_axi_awaddr   (i2c_s_awaddr),
+    .s_axi_awlen    (i2c_s_awlen),
+    .s_axi_awsize   (i2c_s_awsize),
+    .s_axi_awburst  (i2c_s_awburst),
+    .s_axi_awlock   (i2c_s_awlock),
+    .s_axi_awcache  (i2c_s_awcache),
+    .s_axi_awprot   (i2c_s_awprot),
+    .s_axi_awvalid  (i2c_s_awvalid),
+    .s_axi_awready  (i2c_s_awready),
+    .s_axi_wid      (i2c_s_wid),
+    .s_axi_wdata    (i2c_s_wdata),
+    .s_axi_wstrb    (i2c_s_wstrb),
+    .s_axi_wlast    (i2c_s_wlast),
+    .s_axi_wvalid   (i2c_s_wvalid),
+    .s_axi_wready   (i2c_s_wready),
+    .s_axi_bid      (i2c_s_bid),
+    .s_axi_bresp    (i2c_s_bresp),
+    .s_axi_bvalid   (i2c_s_bvalid),
+    .s_axi_bready   (i2c_s_bready),
+    .s_axi_arid     (i2c_s_arid),
+    .s_axi_araddr   (i2c_s_araddr),
+    .s_axi_arlen    (i2c_s_arlen),
+    .s_axi_arsize   (i2c_s_arsize),
+    .s_axi_arburst  (i2c_s_arburst),
+    .s_axi_arlock   (i2c_s_arlock),
+    .s_axi_arcache  (i2c_s_arcache),
+    .s_axi_arprot   (i2c_s_arprot),
+    .s_axi_arvalid  (i2c_s_arvalid),
+    .s_axi_arready  (i2c_s_arready),
+    .s_axi_rid      (i2c_s_rid),
+    .s_axi_rdata    (i2c_s_rdata),
+    .s_axi_rresp    (i2c_s_rresp),
+    .s_axi_rlast    (i2c_s_rlast),
+    .s_axi_rvalid   (i2c_s_rvalid),
+    .s_axi_rready   (i2c_s_rready),
+    .i2c_irq        (i2c_irq),
+    .touch_scl      (touch_scl),
+    .touch_sda      (touch_sda),
+    .touch_int      (touch_int),
+    .touch_rst_n    (touch_rst_n)
+);
+
+// Unified I2S/VGA/PS2 peripheral.  Register pages are selected internally;
+// the CPU-side mux routes all 0x1fa2/1fa3/1fa4 accesses here.
+avp_axi_controller MULTIMEDIA (
+    .aclk              (aclk),
+    .aresetn           (aresetn),
+    .pix_clk           (vga_pix_clk),
+    .pix_locked        (vga_clk_locked),
+    .aud_clk           (i2s_audio_clk),
+    .aud_locked        (i2s_clk_locked),
+
+    .s_axi_awid        (avp_s_awid),
+    .s_axi_awaddr      (avp_s_awaddr),
+    .s_axi_awlen       (avp_s_awlen),
+    .s_axi_awsize      (avp_s_awsize),
+    .s_axi_awburst     (avp_s_awburst),
+    .s_axi_awlock      (avp_s_awlock),
+    .s_axi_awcache     (avp_s_awcache),
+    .s_axi_awprot      (avp_s_awprot),
+    .s_axi_awvalid     (avp_s_awvalid),
+    .s_axi_awready     (avp_s_awready),
+    .s_axi_wid         (avp_s_wid),
+    .s_axi_wdata       (avp_s_wdata),
+    .s_axi_wstrb       (avp_s_wstrb),
+    .s_axi_wlast       (avp_s_wlast),
+    .s_axi_wvalid      (avp_s_wvalid),
+    .s_axi_wready      (avp_s_wready),
+    .s_axi_bid         (avp_s_bid),
+    .s_axi_bresp       (avp_s_bresp),
+    .s_axi_bvalid      (avp_s_bvalid),
+    .s_axi_bready      (avp_s_bready),
+    .s_axi_arid        (avp_s_arid),
+    .s_axi_araddr      (avp_s_araddr),
+    .s_axi_arlen       (avp_s_arlen),
+    .s_axi_arsize      (avp_s_arsize),
+    .s_axi_arburst     (avp_s_arburst),
+    .s_axi_arlock      (avp_s_arlock),
+    .s_axi_arcache     (avp_s_arcache),
+    .s_axi_arprot      (avp_s_arprot),
+    .s_axi_arvalid     (avp_s_arvalid),
+    .s_axi_arready     (avp_s_arready),
+    .s_axi_rid         (avp_s_rid),
+    .s_axi_rdata       (avp_s_rdata),
+    .s_axi_rresp       (avp_s_rresp),
+    .s_axi_rlast       (avp_s_rlast),
+    .s_axi_rvalid      (avp_s_rvalid),
+    .s_axi_rready      (avp_s_rready),
+
+    .i2s_m_axi_arid    (i2s_dma_arid),
+    .i2s_m_axi_araddr  (i2s_dma_araddr),
+    .i2s_m_axi_arlen   (i2s_dma_arlen),
+    .i2s_m_axi_arsize  (i2s_dma_arsize),
+    .i2s_m_axi_arburst (i2s_dma_arburst),
+    .i2s_m_axi_arlock  (i2s_dma_arlock),
+    .i2s_m_axi_arcache (i2s_dma_arcache),
+    .i2s_m_axi_arprot  (i2s_dma_arprot),
+    .i2s_m_axi_arvalid (i2s_dma_arvalid),
+    .i2s_m_axi_arready (i2s_dma_arready),
+    .i2s_m_axi_rid     (i2s_dma_rid),
+    .i2s_m_axi_rdata   (i2s_dma_rdata),
+    .i2s_m_axi_rresp   (i2s_dma_rresp),
+    .i2s_m_axi_rlast   (i2s_dma_rlast),
+    .i2s_m_axi_rvalid  (i2s_dma_rvalid),
+    .i2s_m_axi_rready  (i2s_dma_rready),
+
+    .vga_m_axi_arid    (vga_dma_arid),
+    .vga_m_axi_araddr  (vga_dma_araddr),
+    .vga_m_axi_arlen   (vga_dma_arlen),
+    .vga_m_axi_arsize  (vga_dma_arsize),
+    .vga_m_axi_arburst (vga_dma_arburst),
+    .vga_m_axi_arlock  (vga_dma_arlock),
+    .vga_m_axi_arcache (vga_dma_arcache),
+    .vga_m_axi_arprot  (vga_dma_arprot),
+    .vga_m_axi_arvalid (vga_dma_arvalid),
+    .vga_m_axi_arready (vga_dma_arready),
+    .vga_m_axi_rid     (vga_dma_rid),
+    .vga_m_axi_rdata   (vga_dma_rdata),
+    .vga_m_axi_rresp   (vga_dma_rresp),
+    .vga_m_axi_rlast   (vga_dma_rlast),
+    .vga_m_axi_rvalid  (vga_dma_rvalid),
+    .vga_m_axi_rready  (vga_dma_rready),
+
+    .vga_r             (vga_r),
+    .vga_g             (vga_g),
+    .vga_b             (vga_b),
+    .vga_hsync         (vga_hsync),
+    .vga_vsync         (vga_vsync),
+    .ps2_clk           (ps2_clk),
+    .ps2_data          (ps2_data),
+    .i2s_bclk          (i2s_bclk),
+    .i2s_lrclk         (i2s_lrclk),
+    .i2s_data          (i2s_data),
+    .media_irq         (media_irq)
+);
+
+endmodule

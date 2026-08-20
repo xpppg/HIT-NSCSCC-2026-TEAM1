@@ -203,3 +203,135 @@ set_false_path -from [get_clocks clk_out2_clk_pll_33] -to [get_clocks mrxclk_0]
 set_false_path -from [get_clocks clk_out2_clk_pll_33] -to [get_clocks mrxclk_0]
 set_false_path -from [get_clocks clk_out2_clk_pll_33] -to [get_clocks mtxclk_0]
 set_false_path -from [get_clocks clk_out2_clk_pll_33] -to [get_clocks mtxclk_0]
+
+# 16-bit Intel/8080 LCD interface
+# Control signals
+set_property PACKAGE_PIN J25 [get_ports lcd_rst_n]
+set_property PACKAGE_PIN H18 [get_ports lcd_cs_n]
+set_property PACKAGE_PIN K16 [get_ports lcd_rs]
+set_property PACKAGE_PIN L8  [get_ports lcd_wr_n]
+set_property PACKAGE_PIN K8  [get_ports lcd_rd_n]
+set_property PACKAGE_PIN J15 [get_ports lcd_bl_ctr]
+
+# Data bus lcd_db[15:0]
+set_property PACKAGE_PIN H9  [get_ports {lcd_db[0]}]
+set_property PACKAGE_PIN K17 [get_ports {lcd_db[1]}]
+set_property PACKAGE_PIN J20 [get_ports {lcd_db[2]}]
+set_property PACKAGE_PIN M17 [get_ports {lcd_db[3]}]
+set_property PACKAGE_PIN L17 [get_ports {lcd_db[4]}]
+set_property PACKAGE_PIN L18 [get_ports {lcd_db[5]}]
+set_property PACKAGE_PIN L15 [get_ports {lcd_db[6]}]
+set_property PACKAGE_PIN M15 [get_ports {lcd_db[7]}]
+set_property PACKAGE_PIN M16 [get_ports {lcd_db[8]}]
+set_property PACKAGE_PIN L14 [get_ports {lcd_db[9]}]
+set_property PACKAGE_PIN M14 [get_ports {lcd_db[10]}]
+set_property PACKAGE_PIN F22 [get_ports {lcd_db[11]}]
+set_property PACKAGE_PIN G22 [get_ports {lcd_db[12]}]
+set_property PACKAGE_PIN G21 [get_ports {lcd_db[13]}]
+set_property PACKAGE_PIN H24 [get_ports {lcd_db[14]}]
+set_property PACKAGE_PIN J16 [get_ports {lcd_db[15]}]
+
+set_property IOSTANDARD LVCMOS33 [get_ports lcd_rst_n]
+set_property IOSTANDARD LVCMOS33 [get_ports lcd_cs_n]
+set_property IOSTANDARD LVCMOS33 [get_ports lcd_rs]
+set_property IOSTANDARD LVCMOS33 [get_ports lcd_wr_n]
+set_property IOSTANDARD LVCMOS33 [get_ports lcd_rd_n]
+set_property IOSTANDARD LVCMOS33 [get_ports lcd_bl_ctr]
+set_property IOSTANDARD LVCMOS33 [get_ports {lcd_db[*]}]
+
+# ALIENTEK 4.3-inch capacitive touch interface on LCD1 connector
+# Pin 30 T_MOSI/SDA, pin 31 T_PEN/INT, pin 33 T_CS/RST#, pin 34 T_CLK/SCL
+set_property PACKAGE_PIN J24 [get_ports touch_sda]
+set_property PACKAGE_PIN H21 [get_ports touch_scl]
+set_property PACKAGE_PIN L19 [get_ports touch_int]
+set_property PACKAGE_PIN G24 [get_ports touch_rst_n]
+
+set_property IOSTANDARD LVCMOS33 [get_ports touch_sda]
+set_property IOSTANDARD LVCMOS33 [get_ports touch_scl]
+set_property IOSTANDARD LVCMOS33 [get_ports touch_int]
+set_property IOSTANDARD LVCMOS33 [get_ports touch_rst_n]
+
+# I2C is open drain.  The LCD module normally provides external pull-ups;
+# weak internal pull-ups keep the inputs defined when the module is absent.
+set_property PULLUP true [get_ports touch_sda]
+set_property PULLUP true [get_ports touch_scl]
+set_property PULLUP true [get_ports touch_int]
+
+# On-board 12-bit VGA resistor DAC, 640x480@60 output
+set_property PACKAGE_PIN T4 [get_ports {vga_r[0]}]
+set_property PACKAGE_PIN T3 [get_ports {vga_r[1]}]
+set_property PACKAGE_PIN R2 [get_ports {vga_r[2]}]
+set_property PACKAGE_PIN U4 [get_ports {vga_r[3]}]
+set_property PACKAGE_PIN T2 [get_ports {vga_g[0]}]
+set_property PACKAGE_PIN R1 [get_ports {vga_g[1]}]
+set_property PACKAGE_PIN U2 [get_ports {vga_g[2]}]
+set_property PACKAGE_PIN R5 [get_ports {vga_g[3]}]
+set_property PACKAGE_PIN P5 [get_ports {vga_b[0]}]
+set_property PACKAGE_PIN N1 [get_ports {vga_b[1]}]
+set_property PACKAGE_PIN P1 [get_ports {vga_b[2]}]
+set_property PACKAGE_PIN P3 [get_ports {vga_b[3]}]
+set_property PACKAGE_PIN U5 [get_ports vga_hsync]
+set_property PACKAGE_PIN U6 [get_ports vga_vsync]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_r[*]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_g[*]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_b[*]}]
+set_property IOSTANDARD LVCMOS33 [get_ports vga_hsync]
+set_property IOSTANDARD LVCMOS33 [get_ports vga_vsync]
+
+# On-board PS/2 connector through the 2N7002 bidirectional level shifters
+set_property PACKAGE_PIN Y2  [get_ports ps2_clk]
+set_property PACKAGE_PIN AD1 [get_ports ps2_data]
+set_property IOSTANDARD LVCMOS33 [get_ports ps2_clk]
+set_property IOSTANDARD LVCMOS33 [get_ports ps2_data]
+set_property PULLUP true [get_ports ps2_clk]
+set_property PULLUP true [get_ports ps2_data]
+
+# J13 expansion header to an external MAX98357A (share board ground)
+set_property PACKAGE_PIN R26 [get_ports i2s_bclk]
+set_property PACKAGE_PIN K26 [get_ports i2s_lrclk]
+set_property PACKAGE_PIN N26 [get_ports i2s_data]
+set_property IOSTANDARD LVCMOS33 [get_ports i2s_bclk]
+set_property IOSTANDARD LVCMOS33 [get_ports i2s_lrclk]
+set_property IOSTANDARD LVCMOS33 [get_ports i2s_data]
+
+# Multimedia clock-domain crossings
+#
+# The AXI register/DMA logic, VGA scanout and I2S serializer are clocked by
+# three independent PLL/MMCM outputs. Their intentional crossings use XPM
+# asynchronous FIFOs, two-flop synchronizers or Gray/toggle synchronizers.
+# Although the clock generators use the same 100 MHz board oscillator, their
+# output phases are not a functional timing relationship.
+# Clocking Wizard generated-clock objects are attached inside each IP, not
+# necessarily to the top-level wrapper output pin when this XDC is evaluated.
+# Use their actual generated-clock names (also shown by report_timing) so a
+# failed pin lookup cannot silently omit the entire CDC exception.
+set multimedia_axi_clk [get_clocks -quiet clk_out2_clk_pll_33]
+set multimedia_i2s_clk [get_clocks -quiet clk_out1_clk_wiz_i2s]
+set multimedia_vga_clk [get_clocks -quiet clk_out1_clk_wiz_vga]
+
+if {[llength $multimedia_axi_clk] != 1} {
+    error "Expected clock clk_out2_clk_pll_33, found: $multimedia_axi_clk"
+}
+if {[llength $multimedia_i2s_clk] != 1} {
+    error "Expected clock clk_out1_clk_wiz_i2s, found: $multimedia_i2s_clk"
+}
+if {[llength $multimedia_vga_clk] != 1} {
+    error "Expected clock clk_out1_clk_wiz_vga, found: $multimedia_vga_clk"
+}
+
+set_clock_groups -name multimedia_async_domains -asynchronous \
+    -group $multimedia_axi_clk \
+    -group $multimedia_i2s_clk \
+    -group $multimedia_vga_clk
+
+# Only the reset synchronizer registers intentionally receive an asynchronous
+# clear. All downstream VGA/I2S state is released synchronously
+# by pix_resetn/aud_resetn and must remain fully timed inside its own domain.
+set multimedia_reset_sync_clr [get_pins -quiet -hierarchical -filter \
+    {REF_PIN_NAME == CLR &&
+     (NAME =~ *pix_reset_sync_reg* || NAME =~ *aud_reset_sync_reg*)}]
+if {[llength $multimedia_reset_sync_clr] > 0} {
+    set_false_path -to $multimedia_reset_sync_clr
+} else {
+    puts "WARNING: multimedia reset synchronizer CLR pins were not found"
+}
