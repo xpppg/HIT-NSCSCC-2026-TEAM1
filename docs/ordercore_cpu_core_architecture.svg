@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760">
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0 0 L9 4.5 L0 9 Z" fill="#283747"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0 0 L9 4.5 L0 9 Z" fill="#bd514d"/>
+    </marker>
+    <style>
+      text { font-family: Consolas, "Noto Sans CJK SC", "Microsoft YaHei", monospace; fill: #202b38; }
+      .title { font: 700 30px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+      .subtitle { font-size: 15px; fill: #5d6d7e; }
+      .region-title { font-size: 21px; font-weight: 700; }
+      .box-title { font-size: 18px; font-weight: 700; }
+      .label { font-size: 14px; }
+      .tiny { font-size: 12px; fill: #4e6072; }
+      .flow { fill: none; stroke: #283747; stroke-width: 2.2; marker-end: url(#arrow); }
+      .feedback { fill: none; stroke: #bd514d; stroke-width: 2.1; stroke-dasharray: 7 6; marker-end: url(#arrow-red); }
+      .region { stroke: #283747; stroke-width: 2; stroke-dasharray: 7 6; }
+      .box { stroke: #364b60; stroke-width: 1.7; }
+      .mini { stroke: #52687d; stroke-width: 1.3; }
+    </style>
+  </defs>
+
+  <rect width="1400" height="760" fill="#fafcff"/>
+  <text x="700" y="42" text-anchor="middle" class="title">OrderCore CPU Core</text>
+  <text x="700" y="67" text-anchor="middle" class="subtitle">顺序双发射流水线</text>
+
+  <rect x="20" y="88" width="610" height="555" rx="34" fill="#e5f3df" class="region"/>
+  <text x="45" y="123" class="region-title">Frontend</text>
+
+  <rect x="50" y="150" width="165" height="175" rx="11" fill="#f6e1d3" class="box"/>
+  <text x="132" y="180" text-anchor="middle" class="box-title">BPU</text>
+  <rect x="68" y="200" width="129" height="38" rx="6" fill="#e8f0ff" class="mini"/>
+  <text x="132" y="224" text-anchor="middle" class="label">BHT + PHT</text>
+  <rect x="68" y="250" width="75" height="38" rx="6" fill="#e8f0ff" class="mini"/>
+  <text x="105" y="274" text-anchor="middle" class="label">BTB × 2</text>
+  <rect x="151" y="250" width="46" height="38" rx="6" fill="#e8f0ff" class="mini"/>
+  <text x="174" y="274" text-anchor="middle" class="label">RAS</text>
+
+  <rect x="255" y="150" width="220" height="175" rx="11" fill="#a9c8eb" class="box"/>
+  <text x="365" y="180" text-anchor="middle" class="box-title">Instruction Fetch</text>
+  <rect x="278" y="199" width="174" height="31" rx="5" fill="#eff5ff" class="mini"/>
+  <text x="365" y="220" text-anchor="middle" class="label">pre_IF</text>
+  <path d="M365 230 V242" class="flow"/>
+  <rect x="278" y="244" width="174" height="31" rx="5" fill="#eff5ff" class="mini"/>
+  <text x="365" y="265" text-anchor="middle" class="label">IF1</text>
+  <path d="M365 275 V287" class="flow"/>
+  <rect x="278" y="289" width="174" height="31" rx="5" fill="#eff5ff" class="mini"/>
+  <text x="365" y="310" text-anchor="middle" class="label">IF2</text>
+
+  <rect x="515" y="150" width="90" height="335" rx="11" fill="#cba3bd" class="box"/>
+  <text x="560" y="270" text-anchor="middle" class="box-title">Fetch</text>
+  <text x="560" y="295" text-anchor="middle" class="box-title">Buffer</text>
+  <text x="560" y="326" text-anchor="middle" class="label">9 entries</text>
+
+  <path d="M215 237 H255" class="flow"/>
+  <rect x="85" y="390" width="170" height="78" rx="10" fill="#a8ddea" class="box"/>
+  <text x="170" y="422" text-anchor="middle" class="box-title">TLB</text>
+  <text x="170" y="449" text-anchor="middle" class="label">16 entries</text>
+
+  <rect x="300" y="390" width="170" height="78" rx="10" fill="#a8ddea" class="box"/>
+  <text x="385" y="422" text-anchor="middle" class="box-title">I-Cache</text>
+  <text x="385" y="449" text-anchor="middle" class="label">8 KB</text>
+
+  <path d="M365 325 V365 H170 V390" class="flow"/>
+  <path d="M255 429 H300" class="flow"/>
+  <path d="M470 429 H492 V390 H515" class="flow"/>
+
+  <rect x="650" y="88" width="730" height="555" rx="34" fill="#dfeafc" class="region"/>
+  <text x="675" y="123" class="region-title">Backend</text>
+
+  <rect x="700" y="150" width="105" height="175" rx="10" fill="#7ea6d8" class="box"/>
+  <text x="752" y="225" text-anchor="middle" class="box-title">ID × 2</text>
+  <text x="752" y="252" text-anchor="middle" class="label">Decode</text>
+
+  <rect x="845" y="150" width="135" height="175" rx="10" fill="#caa3bc" class="box"/>
+  <text x="912" y="220" text-anchor="middle" class="box-title">ID / IS</text>
+  <text x="912" y="247" text-anchor="middle" class="label">FIFO</text>
+  <text x="912" y="275" text-anchor="middle" class="label">2 entries</text>
+
+  <rect x="1020" y="150" width="165" height="175" rx="10" fill="#92d9e9" class="box"/>
+  <text x="1102" y="220" text-anchor="middle" class="box-title">Issue</text>
+  <text x="1102" y="250" text-anchor="middle" class="label">Dual Issue</text>
+
+  <rect x="1215" y="150" width="130" height="175" rx="10" fill="#92d9e9" class="box"/>
+  <text x="1280" y="220" text-anchor="middle" class="box-title">RegFile</text>
+  <text x="1280" y="250" text-anchor="middle" class="label">4R / 2W</text>
+
+  <path d="M605 237 H700" class="flow"/>
+  <text x="652" y="226" text-anchor="middle" class="tiny">2 instr</text>
+  <path d="M805 237 H845" class="flow"/>
+  <path d="M980 237 H1020" class="flow"/>
+  <path d="M1185 237 H1215" class="flow"/>
+
+  <path d="M1280 325 V346 H960 V370" class="flow"/>
+  <path d="M1280 346 H1235 V370" class="flow"/>
+
+  <rect x="835" y="370" width="260" height="140" rx="11" fill="#ccf6d8" class="box"/>
+  <text x="965" y="397" text-anchor="middle" class="box-title">Main Pipeline</text>
+  <rect x="855" y="415" width="104" height="34" rx="5" fill="#dff39b" class="mini"/>
+  <text x="907" y="437" text-anchor="middle" class="label">ALU / MDU</text>
+  <rect x="972" y="415" width="103" height="34" rx="5" fill="#dff39b" class="mini"/>
+  <text x="1023" y="437" text-anchor="middle" class="label">BRU</text>
+  <rect x="855" y="460" width="104" height="34" rx="5" fill="#dff39b" class="mini"/>
+  <text x="907" y="482" text-anchor="middle" class="label">LSU</text>
+  <rect x="972" y="460" width="103" height="34" rx="5" fill="#dff39b" class="mini"/>
+  <text x="1023" y="482" text-anchor="middle" class="label">PEU</text>
+
+  <rect x="1130" y="370" width="210" height="140" rx="11" fill="#e8f8c9" class="box"/>
+  <text x="1235" y="413" text-anchor="middle" class="box-title">Sub Pipeline</text>
+  <rect x="1155" y="442" width="160" height="39" rx="6" fill="#dff39b" class="mini"/>
+  <text x="1235" y="467" text-anchor="middle" class="label">ALU / MDU</text>
+
+  <rect x="680" y="382" width="120" height="70" rx="9" fill="#a8ddea" class="box"/>
+  <text x="740" y="424" text-anchor="middle" class="box-title">CSR</text>
+  <path d="M800 417 H835" class="flow"/>
+  <text x="650" y="413" text-anchor="end" class="tiny">intrpt[7:0]</text>
+  <path d="M650 417 H680" class="flow"/>
+
+  <rect x="680" y="475" width="120" height="70" rx="9" fill="#a8ddea" class="box"/>
+  <text x="740" y="505" text-anchor="middle" class="box-title">D-Cache</text>
+  <text x="740" y="529" text-anchor="middle" class="label">8 KB</text>
+  <path d="M855 477 H820 V510 H800" class="flow"/>
+
+  <rect x="850" y="555" width="490" height="65" rx="11" fill="#caa3bc" class="box"/>
+  <text x="1095" y="582" text-anchor="middle" class="box-title">WB / Commit × 2</text>
+  <text x="1095" y="606" text-anchor="middle" class="label">In-order Commit</text>
+
+  <path d="M965 510 V555" class="flow"/>
+  <path d="M1235 510 V535 H1220 V555" class="flow"/>
+  <path d="M1340 588 H1360 V237 H1345" class="flow"/>
+
+  <path d="M850 588 H660 V681 H30 V237 H50" class="feedback"/>
+  <text x="345" y="704" text-anchor="middle" class="tiny" fill="#a7433f">branch update / flush</text>
+
+  <text x="1350" y="735" text-anchor="end" class="tiny">CPU core only</text>
+</svg>

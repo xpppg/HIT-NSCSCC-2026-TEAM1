@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fbff"/>
+      <stop offset="1" stop-color="#eef3f8"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#26364a" flood-opacity="0.18"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#34495e"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#2878b5"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#c6534d"/>
+    </marker>
+    <style>
+      text { font-family: "Noto Sans CJK SC", "Microsoft YaHei", "SimHei", sans-serif; fill: #243447; }
+      .title { font-size: 34px; font-weight: 700; letter-spacing: 1px; }
+      .subtitle { font-size: 17px; fill: #607386; }
+      .region-title { font-size: 22px; font-weight: 700; }
+      .box-title { font-size: 18px; font-weight: 700; }
+      .box-text { font-size: 14px; }
+      .small { font-size: 13px; fill: #52677a; }
+      .pipe { stroke: #34495e; stroke-width: 2.4; fill: none; marker-end: url(#arrow); }
+      .control { stroke: #c6534d; stroke-width: 2.2; stroke-dasharray: 8 6; fill: none; marker-end: url(#arrowRed); }
+      .memory { stroke: #2878b5; stroke-width: 2.4; fill: none; marker-end: url(#arrowBlue); }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="url(#bg)"/>
+  <text x="800" y="49" text-anchor="middle" class="title">OrderCore CPU 微架构</text>
+  <text x="800" y="77" text-anchor="middle" class="subtitle">LoongArch32R · 静态调度 · 顺序执行与提交 · 非对称双发射</text>
+
+  <!-- Front end -->
+  <rect x="35" y="105" width="700" height="405" rx="20" fill="#eaf4ff" stroke="#6aa5d8" stroke-width="2"/>
+  <text x="58" y="137" class="region-title" fill="#246b9e">流水线前端</text>
+
+  <g>
+    <rect x="225" y="145" width="320" height="82" rx="12" fill="#ffffff" stroke="#5b9bd5" stroke-width="2"/>
+    <text x="385" y="174" text-anchor="middle" class="box-title">分支预测器 BPU</text>
+    <text x="385" y="198" text-anchor="middle" class="box-text">BHT + PHT · 双路 BTB · 8 项 RAS</text>
+    <text x="385" y="216" text-anchor="middle" class="small">同拍预测 PC 与 PC+4</text>
+  </g>
+
+  <g>
+    <rect x="65" y="280" width="130" height="105" rx="12" fill="#fff" stroke="#5b9bd5" stroke-width="2"/>
+    <text x="130" y="314" text-anchor="middle" class="box-title">pre_IF</text>
+    <text x="130" y="340" text-anchor="middle" class="box-text">NextPC 选择</text>
+    <text x="130" y="362" text-anchor="middle" class="small">跨行判断</text>
+
+    <rect x="225" y="280" width="130" height="105" rx="12" fill="#fff" stroke="#5b9bd5" stroke-width="2"/>
+    <text x="290" y="314" text-anchor="middle" class="box-title">IF1</text>
+    <text x="290" y="340" text-anchor="middle" class="box-text">地址翻译</text>
+    <text x="290" y="362" text-anchor="middle" class="small">取指请求</text>
+
+    <rect x="385" y="280" width="130" height="105" rx="12" fill="#fff" stroke="#5b9bd5" stroke-width="2"/>
+    <text x="450" y="314" text-anchor="middle" class="box-title">IF2</text>
+    <text x="450" y="340" text-anchor="middle" class="box-text">指令返回</text>
+    <text x="450" y="362" text-anchor="middle" class="small">双指令组织</text>
+
+    <rect x="545" y="268" width="160" height="129" rx="12" fill="#d8ebff" stroke="#397db3" stroke-width="2.5"/>
+    <text x="625" y="304" text-anchor="middle" class="box-title">Fetch Buffer</text>
+    <text x="625" y="330" text-anchor="middle" class="box-text">前后端解耦 FIFO</text>
+    <text x="625" y="354" text-anchor="middle" class="small">物理 16 项</text>
+    <text x="625" y="375" text-anchor="middle" class="small">最大有效深度 9 项</text>
+  </g>
+
+  <path d="M195 332 H225" class="pipe"/>
+  <path d="M355 332 H385" class="pipe"/>
+  <path d="M515 332 H545" class="pipe"/>
+  <path d="M385 227 V251 H130 V280" class="control"/>
+  <text x="245" y="249" text-anchor="middle" class="small" fill="#a63f3b">预测 PC</text>
+
+  <g>
+    <rect x="170" y="420" width="175" height="63" rx="11" fill="#f2f8ff" stroke="#78a9cf" stroke-width="1.8"/>
+    <text x="257" y="447" text-anchor="middle" class="box-title">MMU / iTLB</text>
+    <text x="257" y="469" text-anchor="middle" class="small">直接映射 / 页表映射</text>
+
+    <rect x="390" y="420" width="175" height="63" rx="11" fill="#f2f8ff" stroke="#78a9cf" stroke-width="1.8"/>
+    <text x="477" y="447" text-anchor="middle" class="box-title">L1 I-Cache</text>
+    <text x="477" y="469" text-anchor="middle" class="small">8 KB · 2 路 · 64 B/行</text>
+  </g>
+  <path d="M290 385 V420" class="memory"/>
+  <path d="M345 451 H390" class="memory"/>
+  <path d="M477 420 V385" class="memory"/>
+
+  <!-- Back end -->
+  <rect x="760" y="105" width="805" height="505" rx="20" fill="#fff4e8" stroke="#d99a58" stroke-width="2"/>
+  <text x="783" y="137" class="region-title" fill="#a65d19">流水线后端</text>
+
+  <g>
+    <rect x="790" y="280" width="125" height="105" rx="12" fill="#fff" stroke="#dd944a" stroke-width="2"/>
+    <text x="852" y="314" text-anchor="middle" class="box-title">ID × 2</text>
+    <text x="852" y="341" text-anchor="middle" class="box-text">双路译码</text>
+    <text x="852" y="363" text-anchor="middle" class="small">指令分类</text>
+
+    <rect x="945" y="268" width="145" height="129" rx="12" fill="#ffead3" stroke="#ce7d2d" stroke-width="2.5"/>
+    <text x="1017" y="304" text-anchor="middle" class="box-title">ID / IS 队列</text>
+    <text x="1017" y="332" text-anchor="middle" class="box-text">2 深度 FIFO 化</text>
+    <text x="1017" y="356" text-anchor="middle" class="small">允许 1～2 项流入/流出</text>
+    <text x="1017" y="377" text-anchor="middle" class="small">缓解部分发射气泡</text>
+
+    <rect x="1120" y="268" width="145" height="129" rx="12" fill="#fff" stroke="#dd944a" stroke-width="2"/>
+    <text x="1192" y="302" text-anchor="middle" class="box-title">IS</text>
+    <text x="1192" y="328" text-anchor="middle" class="box-text">四读两写寄存器堆</text>
+    <text x="1192" y="352" text-anchor="middle" class="small">相关检测 / 前递</text>
+    <text x="1192" y="374" text-anchor="middle" class="small">非对称双发射调度</text>
+  </g>
+
+  <path d="M705 332 H790" class="pipe"/>
+  <path d="M915 332 H945" class="pipe"/>
+  <path d="M1090 332 H1120" class="pipe"/>
+
+  <!-- execution lanes -->
+  <g>
+    <rect x="1300" y="162" width="225" height="165" rx="14" fill="#ffe5df" stroke="#cf6b5f" stroke-width="2.5"/>
+    <text x="1412" y="191" text-anchor="middle" class="box-title">主流水线 EX0</text>
+    <rect x="1320" y="207" width="86" height="42" rx="8" fill="#fff" stroke="#d98a80"/>
+    <text x="1363" y="234" text-anchor="middle" class="box-text">ALU / 乘除</text>
+    <rect x="1419" y="207" width="86" height="42" rx="8" fill="#fff" stroke="#d98a80"/>
+    <text x="1462" y="234" text-anchor="middle" class="box-text">BRU</text>
+    <rect x="1320" y="263" width="86" height="42" rx="8" fill="#fff" stroke="#d98a80"/>
+    <text x="1363" y="290" text-anchor="middle" class="box-text">LSU</text>
+    <rect x="1419" y="263" width="86" height="42" rx="8" fill="#fff" stroke="#d98a80"/>
+    <text x="1462" y="290" text-anchor="middle" class="box-text">PEU</text>
+
+    <rect x="1300" y="354" width="225" height="86" rx="14" fill="#fff0dd" stroke="#d99547" stroke-width="2.2"/>
+    <text x="1412" y="384" text-anchor="middle" class="box-title">副流水线 EX1</text>
+    <text x="1412" y="413" text-anchor="middle" class="box-text">ALU / 乘除 · normal 指令</text>
+
+    <rect x="1300" y="476" width="225" height="95" rx="14" fill="#e9e3ff" stroke="#8372bf" stroke-width="2.5"/>
+    <text x="1412" y="510" text-anchor="middle" class="box-title">WB / Commit × 2</text>
+    <text x="1412" y="536" text-anchor="middle" class="box-text">顺序提交 · 精确例外</text>
+    <text x="1412" y="557" text-anchor="middle" class="small">写回 / 分支纠错 / 冲刷</text>
+  </g>
+
+  <path d="M1265 312 H1282 V244 H1300" class="pipe"/>
+  <path d="M1265 352 H1282 V397 H1300" class="pipe"/>
+  <path d="M1505 327 H1540 V457 H1470 V476" class="pipe"/>
+  <path d="M1412 440 V476" class="pipe"/>
+
+  <g>
+    <rect x="790" y="438" width="215" height="105" rx="12" fill="#f9f5ff" stroke="#8875bb" stroke-width="2"/>
+    <text x="897" y="470" text-anchor="middle" class="box-title">CSR / TLB</text>
+    <text x="897" y="496" text-anchor="middle" class="box-text">16 项全相联混合 TLB</text>
+    <text x="897" y="520" text-anchor="middle" class="small">例外 · 中断 · DMW · 页表管理</text>
+  </g>
+  <path d="M1005 491 H1090 V386 H1120" class="control"/>
+  <path d="M1300 524 H1005" class="control"/>
+
+  <!-- feedback -->
+  <path d="M1525 524 H1550 V125 H560 V170 H545" class="control"/>
+  <text x="970" y="119" text-anchor="middle" class="small" fill="#a63f3b">分支更新 / 预测纠错 / 例外冲刷</text>
+
+  <!-- memory system -->
+  <rect x="35" y="635" width="1530" height="300" rx="20" fill="#eaf8ef" stroke="#67a97c" stroke-width="2"/>
+  <text x="58" y="670" class="region-title" fill="#397d4d">存储层次与 SoC 接口</text>
+
+  <g>
+    <rect x="90" y="718" width="180" height="82" rx="12" fill="#fff" stroke="#57a373" stroke-width="2"/>
+    <text x="180" y="748" text-anchor="middle" class="box-title">L1 I-Cache</text>
+    <text x="180" y="774" text-anchor="middle" class="box-text">8 KB · 2 路组相联</text>
+
+    <rect x="340" y="700" width="185" height="105" rx="12" fill="#fff" stroke="#57a373" stroke-width="2"/>
+    <text x="432" y="732" text-anchor="middle" class="box-title">L1 D-Cache</text>
+    <text x="432" y="758" text-anchor="middle" class="box-text">8 KB · 2 路 · 写回</text>
+    <text x="432" y="781" text-anchor="middle" class="small">写分配 · 64 B/行</text>
+
+    <rect x="600" y="700" width="200" height="105" rx="12" fill="#dff3e6" stroke="#448d5c" stroke-width="2.5"/>
+    <text x="700" y="732" text-anchor="middle" class="box-title">L2 D-Cache</text>
+    <text x="700" y="758" text-anchor="middle" class="box-text">64 KB · 2 路组相联</text>
+    <text x="700" y="781" text-anchor="middle" class="small">独立 Dirty 位 · 64 B/行</text>
+
+    <rect x="600" y="840" width="200" height="65" rx="12" fill="#fff" stroke="#57a373" stroke-width="2"/>
+    <text x="700" y="867" text-anchor="middle" class="box-title">预取 DBuffer</text>
+    <text x="700" y="890" text-anchor="middle" class="small">Next-line · 2 条缓存行</text>
+
+    <rect x="340" y="840" width="185" height="65" rx="12" fill="#fff" stroke="#57a373" stroke-width="2"/>
+    <text x="432" y="867" text-anchor="middle" class="box-title">Uncache</text>
+    <text x="432" y="890" text-anchor="middle" class="small">MMIO / 非缓存访问</text>
+
+    <rect x="905" y="718" width="230" height="105" rx="12" fill="#dceeff" stroke="#4a8fc2" stroke-width="2.5"/>
+    <text x="1020" y="750" text-anchor="middle" class="box-title">AXI Control</text>
+    <text x="1020" y="776" text-anchor="middle" class="box-text">读写请求仲裁</text>
+    <text x="1020" y="799" text-anchor="middle" class="small">I-Cache / L2 / DBuffer / Uncache</text>
+
+    <rect x="1245" y="718" width="255" height="105" rx="12" fill="#dceeff" stroke="#367cac" stroke-width="2.5"/>
+    <text x="1372" y="750" text-anchor="middle" class="box-title">AXI3 Master</text>
+    <text x="1372" y="776" text-anchor="middle" class="box-text">32 位地址 / 32 位数据</text>
+    <text x="1372" y="799" text-anchor="middle" class="small">连接 SoC 总线、DDR3 与外设</text>
+  </g>
+
+  <path d="M180 718 V690 H935 V718" class="memory"/>
+  <path d="M525 752 H600" class="memory"/>
+  <path d="M800 752 H905" class="memory"/>
+  <path d="M800 872 H850 V802 H905" class="memory"/>
+  <path d="M525 872 H860 V788 H905" class="memory"/>
+  <path d="M1135 770 H1245" class="memory"/>
+  <path d="M700 805 V840" class="memory"/>
+
+  <!-- vertical connections from pipeline -->
+  <path d="M477 483 V620 H180 V718" class="memory"/>
+  <text x="320" y="619" class="small" fill="#2878b5">取指缺失</text>
+  <path d="M1320 284 H1290 V625 H432 V700" class="memory"/>
+  <text x="1160" y="623" class="small" fill="#2878b5">Load / Store</text>
+
+  <!-- external labels -->
+  <path d="M1500 770 H1550" class="memory"/>
+  <text x="1530" y="753" text-anchor="middle" class="small">SoC</text>
+  <path d="M790 491 H750" class="control"/>
+  <text x="745" y="475" text-anchor="end" class="small" fill="#a63f3b">intrpt[7:0]</text>
+
+  <!-- legend -->
+  <line x1="70" y1="966" x2="115" y2="966" class="pipe"/>
+  <text x="125" y="972" class="small">指令/数据主通路</text>
+  <line x1="285" y1="966" x2="330" y2="966" class="control"/>
+  <text x="340" y="972" class="small">控制、反馈与冲刷</text>
+  <line x1="535" y1="966" x2="580" y2="966" class="memory"/>
+  <text x="590" y="972" class="small">存储访问通路</text>
+  <text x="1518" y="972" text-anchor="end" class="small">依据当前 Verilog RTL 绘制</text>
+</svg>
